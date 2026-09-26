@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: nids-ae-dsp
+Version: 1.0.0
+Summary: Network Intrusion Detection System built on Pretrained AE-DSP Framework
+Author: Antigravity
+Requires-Python: >=3.8
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: scikit-learn
+Requires-Dist: lightgbm
+Requires-Dist: shap
+Requires-Dist: torch
+Requires-Dist: joblib
+Dynamic: author
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
