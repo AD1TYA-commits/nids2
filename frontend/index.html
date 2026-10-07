@@ -1,0 +1,2516 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NIDS SOC Threat Operations & Defense Console</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            socBg: '#080c14',
+            socCard: '#0f172a',
+            socCardHover: '#131e35',
+            socBorder: '#1e293b',
+            socBorderLight: '#334155',
+            socGreen: '#10b981',
+            socYellow: '#f59e0b',
+            socRed: '#ef4444',
+            socPurple: '#a855f7',
+            socPink: '#ec4899',
+            socCyan: '#06b6d4',
+            socBlue: '#3b82f6',
+          },
+          fontFamily: {
+            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+            sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background-color: #080c14; font-family: 'Inter', system-ui, sans-serif; }
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0b0f19; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+    /* Decision Badges */
+    .badge-normal { background-color: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); }
+    .badge-suspicious { background-color: rgba(245, 158, 11, 0.12); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.35); }
+    .badge-malicious { background-color: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+    .badge-unknown { background-color: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.45); }
+    .badge-critical { background-color: rgba(236, 72, 153, 0.18); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.5); }
+
+    /* Flash Highlight on new stream row */
+    .new-row-highlight { animation: flash-row 1.2s ease-out; }
+    @keyframes flash-row {
+      0% { background-color: rgba(59, 130, 246, 0.22); }
+      100% { background-color: transparent; }
+    }
+
+    /* Gauge Arc */
+    .gauge-bg { stroke: #1e293b; stroke-width: 8; fill: none; }
+    .gauge-fill { stroke-width: 8; fill: none; transition: stroke-dashoffset 0.8s ease, stroke 0.5s ease; stroke-linecap: round; }
+  </style>
+</head>
+<body class="text-slate-200 min-h-screen flex flex-col antialiased select-none">
+
+  <!-- ============================================================ -->
+  <!-- 1. TOP NAVIGATION BAR -->
+  <!-- ============================================================ -->
+  <header class="border-b border-socBorder bg-socCard/90 backdrop-blur sticky top-0 z-30 px-5 py-3 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+    <!-- Brand / Identity -->
+    <div class="flex items-center gap-3">
+      <div class="h-9 w-9 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center font-bold text-white shadow-md shadow-indigo-500/20 border border-indigo-400/30">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-base font-extrabold tracking-tight text-white uppercase font-mono">NIDS SOC Engine</span>
+          <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-700/60 font-semibold tracking-wider">v2.1 PRETRAINED</span>
+        </div>
+        <p class="text-[11px] text-slate-400 font-mono tracking-tight">AE-DSP Multi-Facet Subspace Decomposition &bull; Deterministic Risk Engine</p>
+      </div>
+    </div>
+
+    <!-- Center: Explicit 3-Mode Switcher -->
+    <div class="flex items-center gap-1.5 bg-[#0a0f1d] p-1 rounded-lg border border-slate-800 shadow-inner">
+      <button id="btnModeLive" onclick="switchMode('live')" class="px-3 py-1.5 text-xs font-semibold rounded font-mono transition text-slate-400 hover:text-white flex items-center gap-1.5">
+        <span class="h-2 w-2 rounded-full bg-emerald-500"></span> LIVE CAPTURE
+      </button>
+      <button id="btnModeCaptured" onclick="switchMode('captured')" class="px-3 py-1.5 text-xs font-semibold rounded font-mono transition text-slate-400 hover:text-white flex items-center gap-1.5">
+        <span class="h-2 w-2 rounded-full bg-amber-500"></span> CAPTURED REPLAY
+      </button>
+      <button id="btnModeDemo" onclick="switchMode('demo')" class="px-3 py-1.5 text-xs font-semibold rounded font-mono transition bg-indigo-600 text-white shadow shadow-indigo-600/30 flex items-center gap-1.5">
+        <span class="h-2 w-2 rounded-full bg-indigo-300"></span> DEMO / LAB REPLAY
+      </button>
+    </div>
+
+    <!-- Right: Telemetry & Connection Status -->
+    <div class="flex items-center gap-2.5 flex-wrap">
+      <!-- Capture Interface Indicator -->
+      <div id="interfacePill" class="flex items-center gap-1.5 text-xs font-mono px-2.5 py-1 rounded bg-slate-900 text-slate-300 border border-socBorder">
+        <span class="text-slate-500">IF:</span>
+        <span id="txtInterface" class="text-emerald-400 font-semibold">virbr0</span>
+      </div>
+
+      <!-- Backend / API Status -->
+      <div id="apiStatusPill" class="flex items-center gap-1.5 text-xs font-mono px-2.5 py-1 rounded bg-slate-900 text-slate-300 border border-socBorder">
+        <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+        <span id="txtApiStatus">API: ONLINE</span>
+      </div>
+
+      <!-- WebSocket Connection Pill -->
+      <div id="wsStatusPill" class="flex items-center gap-1.5 text-xs font-mono px-2.5 py-1 rounded bg-slate-900 text-slate-300 border border-socBorder">
+        <span id="wsDot" class="h-2 w-2 rounded-full bg-amber-400 animate-pulse"></span>
+        <span id="wsText" class="font-semibold text-amber-300">CONNECTING</span>
+      </div>
+
+      <!-- Stream Control Group -->
+      <div class="flex items-center gap-1.5 border-l border-socBorder pl-2.5">
+        <button id="btnToggleReplay" onclick="toggleReplay()" class="px-2.5 py-1 text-xs font-mono font-medium rounded bg-indigo-600 hover:bg-indigo-500 text-white transition shadow-sm">
+          Pause Stream
+        </button>
+        <select id="selectSpeed" onchange="changeSpeed(this.value)" class="text-xs font-mono bg-slate-900 border border-socBorder rounded px-2 py-1 text-slate-300 focus:outline-none">
+          <option value="0.05">20/s</option>
+          <option value="0.1" selected>10/s</option>
+          <option value="0.25">4/s</option>
+          <option value="0.5">2/s</option>
+        </select>
+        <button onclick="resetStatsAndTable()" title="Reset Aggregates & Table" class="px-2 py-1 text-xs font-mono rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-socBorder transition">
+          Reset
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============================================================ -->
+  <!-- 14. DEMO EXPERIENCE: NIDS PIPELINE FLOW ARCHITECTURE STRIP -->
+  <!-- ============================================================ -->
+  <section class="border-b border-socBorder bg-[#0a0f1d] px-5 py-2">
+    <div class="max-w-[1720px] mx-auto flex items-center justify-between text-[11px] font-mono text-slate-400 overflow-x-auto gap-3 py-0.5">
+      <div class="flex items-center gap-2 whitespace-nowrap">
+        <span class="text-slate-500">PIPELINE:</span>
+        <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-emerald-400 font-semibold flex items-center gap-1">
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> 1. PCAP Capture
+        </span>
+        <span class="text-slate-600">&rarr;</span>
+        <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-cyan-400 font-semibold flex items-center gap-1">
+          <span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span> 2. Rust Flow Tracker
+        </span>
+        <span class="text-slate-600">&rarr;</span>
+        <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-blue-400 font-semibold flex items-center gap-1">
+          <span class="h-1.5 w-1.5 rounded-full bg-blue-400"></span> 3. 90-Feature Adapter
+        </span>
+        <span class="text-slate-600">&rarr;</span>
+        <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-purple-400 font-semibold flex items-center gap-1">
+          <span class="h-1.5 w-1.5 rounded-full bg-purple-400"></span> 4. AE-DSP &amp; PCA Subspaces
+        </span>
+        <span class="text-slate-600">&rarr;</span>
+        <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-amber-400 font-semibold flex items-center gap-1">
+          <span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span> 5. Risk Rules
+        </span>
+        <span class="text-slate-600">&rarr;</span>
+        <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-rose-400 font-semibold flex items-center gap-1">
+          <span class="h-1.5 w-1.5 rounded-full bg-rose-400"></span> 6. SOC Broadcast
+        </span>
+      </div>
+      <div class="flex items-center gap-3 text-slate-400 whitespace-nowrap pl-4">
+        <span>AE Threshold: <strong class="text-indigo-400 font-mono" id="txtThreshold">1.3728</strong></span>
+        <span>&bull;</span>
+        <span>Source: <strong class="text-slate-300 font-mono" id="txtModeSource">demo_traffic.jsonl</strong></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- MAIN DASHBOARD CONTENT -->
+  <!-- ============================================================ -->
+  <main class="flex-1 p-5 space-y-5 max-w-[1720px] w-full mx-auto">
+
+    <!-- High-Severity Threat Banner (Auto-populates on critical / unknown alerts) -->
+    <div id="bannerSection" class="hidden">
+      <div id="threatBanner" class="p-3.5 px-4 rounded-lg border flex items-start justify-between gap-4 shadow-lg transition-all">
+        <div class="flex items-start gap-3">
+          <span class="text-2xl" id="bannerIcon">🚨</span>
+          <div>
+            <div id="bannerTitle" class="text-xs font-mono font-bold uppercase tracking-wider text-rose-300">HIGH-SEVERITY SECURITY EVENT INTERCEPTED</div>
+            <div id="bannerDetails" class="text-xs font-mono text-slate-300 mt-1">Details will appear here.</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <div id="bannerBadge" class="px-2.5 py-1 text-xs font-mono font-bold rounded bg-rose-900/60 border border-rose-600 text-rose-200">ACTION</div>
+          <button onclick="dismissBanner()" class="text-slate-400 hover:text-white px-2 py-1 text-xs font-mono">&times;</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 2. SECURITY POSTURE OVERVIEW & LIVE SNAPSHOT -->
+    <!-- ============================================================ -->
+    <section class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+      <!-- Posture Summary Card (Gauge + Level) -->
+      <div class="bg-socCard p-4 rounded-lg border border-socBorder shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between border-b border-socBorder pb-2.5">
+          <span class="text-xs font-mono font-semibold text-slate-400 uppercase tracking-wider">Security Posture</span>
+          <span id="postureLevelBadge" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-400 border border-emerald-700">GUARDED</span>
+        </div>
+        <div class="flex items-center justify-between py-3">
+          <div class="space-y-1">
+            <div class="text-[11px] text-slate-400 font-mono uppercase">Global Risk Level</div>
+            <div class="text-3xl font-extrabold font-mono text-white tracking-tight" id="postureAvgRisk">0.0 <span class="text-xs font-normal text-slate-500">/ 100</span></div>
+            <div class="text-[11px] font-mono text-slate-400" id="postureSubtext">Deterministic Policy: Healthy</div>
+          </div>
+          <!-- Semi-circular / Circular Risk SVG Indicator -->
+          <div class="relative w-20 h-20 flex items-center justify-center">
+            <svg class="w-20 h-20 transform -rotate-90" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="40" class="gauge-bg" />
+              <circle id="gaugeFill" cx="50" cy="50" r="40" class="gauge-fill stroke-emerald-500" stroke-dasharray="251.2" stroke-dashoffset="251.2" />
+            </svg>
+            <span id="gaugePct" class="absolute text-xs font-mono font-bold text-white">0%</span>
+          </div>
+        </div>
+        <div class="pt-2 border-t border-socBorder/60 text-[11px] font-mono text-slate-400 flex items-center justify-between">
+          <span>Active Threat Ratio: <strong class="text-white" id="postureThreatRatio">0.0%</strong></span>
+          <span>Clean: <strong class="text-emerald-400" id="postureCleanRatio">100.0%</strong></span>
+        </div>
+      </div>
+
+      <!-- Current Threat Counts Breakdown -->
+      <div class="bg-socCard p-4 rounded-lg border border-socBorder shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between border-b border-socBorder pb-2.5">
+          <span class="text-xs font-mono font-semibold text-slate-400 uppercase tracking-wider">Threat Triage</span>
+          <span class="text-[10px] font-mono text-slate-500">Active State</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2.5 py-2 font-mono">
+          <div class="p-2 rounded bg-slate-900/60 border border-slate-800">
+            <span class="text-[10px] text-yellow-400 uppercase block">Suspicious</span>
+            <span class="text-lg font-bold text-yellow-300" id="triageSuspicious">0</span>
+          </div>
+          <div class="p-2 rounded bg-slate-900/60 border border-slate-800">
+            <span class="text-[10px] text-rose-400 uppercase block">Malicious</span>
+            <span class="text-lg font-bold text-rose-300" id="triageMalicious">0</span>
+          </div>
+          <div class="p-2 rounded bg-slate-900/60 border border-slate-800">
+            <span class="text-[10px] text-purple-400 uppercase block">Zero-Day / Novel</span>
+            <span class="text-lg font-bold text-purple-300" id="triageUnknown">0</span>
+          </div>
+          <div class="p-2 rounded bg-slate-900/60 border border-slate-800">
+            <span class="text-[10px] text-pink-400 uppercase block">Critical</span>
+            <span class="text-lg font-bold text-pink-300" id="triageCritical">0</span>
+          </div>
+        </div>
+        <div class="pt-2 border-t border-socBorder/60 text-[11px] font-mono text-slate-400 flex items-center justify-between">
+          <span>Subspace Anomalies: <strong class="text-purple-400" id="triageAnomaliesTotal">0</strong></span>
+          <span>Quarantined: <strong class="text-amber-400" id="triageQuarantined">0</strong></span>
+        </div>
+      </div>
+
+      <!-- Latest Intercepted Event Snapshot -->
+      <div class="bg-socCard p-4 rounded-lg border border-socBorder shadow-sm lg:col-span-2 flex flex-col justify-between">
+        <div class="flex items-center justify-between border-b border-socBorder pb-2.5">
+          <span class="text-xs font-mono font-semibold text-slate-400 uppercase tracking-wider">Latest Intercepted Flow Event</span>
+          <span id="latestEventTime" class="text-[11px] font-mono text-slate-500">WAITING FOR TELEMETRY</span>
+        </div>
+        <div id="latestEventBody" class="py-2.5 space-y-1.5 font-mono text-xs">
+          <div class="flex items-center justify-center py-6 text-slate-500 font-mono text-xs">
+            WAITING FOR TELEMETRY...
+          </div>
+        </div>
+        <div class="pt-2 border-t border-socBorder/60 text-[11px] font-mono text-slate-400 flex items-center justify-between">
+          <span id="latestDecisionPill" class="text-slate-500">DECISION: PENDING</span>
+          <span id="latestRiskPill" class="text-slate-500">RISK: --</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 3. KPI CARDS -->
+    <!-- ============================================================ -->
+    <section class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
+      <!-- Total Flows Analyzed -->
+      <div class="bg-socCard p-3.5 rounded-lg border border-socBorder shadow-sm">
+        <div class="flex items-center justify-between text-xs text-slate-400 font-mono uppercase tracking-wider">
+          <span>Flows Analyzed</span>
+          <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        </div>
+        <div id="kpiTotal" class="text-2xl font-bold font-mono text-white mt-1">0</div>
+        <div class="text-[11px] text-slate-500 font-mono mt-1" id="kpiTotalSub">Ingested Telemetry</div>
+      </div>
+
+      <!-- Active Threats -->
+      <div class="bg-socCard p-3.5 rounded-lg border border-socBorder shadow-sm">
+        <div class="flex items-center justify-between text-xs text-rose-400 font-mono uppercase tracking-wider">
+          <span>Active Threats</span>
+          <svg class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        </div>
+        <div id="kpiThreats" class="text-2xl font-bold font-mono text-rose-400 mt-1">0</div>
+        <div class="text-[11px] text-slate-500 font-mono mt-1" id="kpiThreatsSub">Malicious + Unknown</div>
+      </div>
+
+      <!-- Anomalies -->
+      <div class="bg-socCard p-3.5 rounded-lg border border-socBorder shadow-sm">
+        <div class="flex items-center justify-between text-xs text-purple-400 font-mono uppercase tracking-wider">
+          <span>Anomalies</span>
+          <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+        </div>
+        <div id="kpiAnomalies" class="text-2xl font-bold font-mono text-purple-400 mt-1">0</div>
+        <div class="text-[11px] text-slate-500 font-mono mt-1">Score &ge; Threshold</div>
+      </div>
+
+      <!-- Normal Flows -->
+      <div class="bg-socCard p-3.5 rounded-lg border border-socBorder shadow-sm">
+        <div class="flex items-center justify-between text-xs text-emerald-400 font-mono uppercase tracking-wider">
+          <span>Normal Flows</span>
+          <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <div id="kpiNormal" class="text-2xl font-bold font-mono text-emerald-400 mt-1">0</div>
+        <div class="text-[11px] text-slate-500 font-mono mt-1">Conforming Baseline</div>
+      </div>
+
+      <!-- High-Risk Events -->
+      <div class="bg-socCard p-3.5 rounded-lg border border-socBorder shadow-sm">
+        <div class="flex items-center justify-between text-xs text-pink-400 font-mono uppercase tracking-wider">
+          <span>High-Risk Events</span>
+          <svg class="w-4 h-4 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        </div>
+        <div id="kpiHighRisk" class="text-2xl font-bold font-mono text-pink-400 mt-1">0</div>
+        <div class="text-[11px] text-slate-500 font-mono mt-1">Risk Score &ge; 70</div>
+      </div>
+
+      <!-- Cumulative Packets / Bytes -->
+      <div class="bg-socCard p-3.5 rounded-lg border border-socBorder shadow-sm">
+        <div class="flex items-center justify-between text-xs text-cyan-400 font-mono uppercase tracking-wider">
+          <span>Packets / Bytes</span>
+          <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7z"/></svg>
+        </div>
+        <div id="kpiVolumePkts" class="text-lg font-bold font-mono text-white mt-1">0 pkts</div>
+        <div class="text-[11px] text-cyan-400/90 font-mono mt-0.5" id="kpiVolumeBytes">0 B observed</div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 4 & 5. REAL-TIME CHARTS: ANOMALY SCORE & RISK TREND -->
+    <!-- ============================================================ -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      <!-- 4. Live Anomaly Score Graph (7 Cols) -->
+      <div class="bg-socCard p-4 rounded-lg border border-socBorder shadow-sm lg:col-span-7 flex flex-col justify-between">
+        <div class="flex items-center justify-between border-b border-socBorder pb-2.5">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-mono font-semibold text-slate-300 uppercase tracking-wider">Live Anomaly Detection (AE-DSP)</span>
+            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800">Global AE + Size PCA</span>
+          </div>
+          <div class="text-xs font-mono text-slate-400 flex items-center gap-3">
+            <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-emerald-500"></span> Normal</span>
+            <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-rose-500"></span> Anomaly</span>
+            <span class="text-indigo-400 font-semibold">Threshold: <span id="chartThresholdVal">1.3728</span></span>
+          </div>
+        </div>
+        <div class="relative h-64 mt-3">
+          <canvas id="anomalyChart"></canvas>
+          <div id="anomalyChartEmpty" class="absolute inset-0 flex items-center justify-center font-mono text-xs text-slate-500 bg-socCard/80">
+            WAITING FOR TELEMETRY...
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. Live Risk Score Graph (5 Cols) -->
+      <div class="bg-socCard p-4 rounded-lg border border-socBorder shadow-sm lg:col-span-5 flex flex-col justify-between">
+        <div class="flex items-center justify-between border-b border-socBorder pb-2.5">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-mono font-semibold text-slate-300 uppercase tracking-wider">Deterministic Risk Score Trend</span>
+            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800">Range: 0-100</span>
+          </div>
+          <div class="text-xs font-mono text-slate-400 flex items-center gap-2">
+            <span>Current: <strong class="text-rose-400" id="currentRiskValue">0.0</strong></span>
+          </div>
+        </div>
+        <div class="relative h-64 mt-3">
+          <canvas id="riskChart"></canvas>
+          <div id="riskChartEmpty" class="absolute inset-0 flex items-center justify-center font-mono text-xs text-slate-500 bg-socCard/80">
+            WAITING FOR TELEMETRY...
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 8, 9, 10. DISTRIBUTIONS & TELEMETRY BREAKDOWN -->
+    <!-- ============================================================ -->
+    <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- 8. Threat Decision Distribution -->
+      <div class="bg-socCard p-4 rounded-lg border border-socBorder shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between border-b border-socBorder pb-2">
+          <span class="text-xs font-mono font-semibold text-slate-300 uppercase tracking-wider">Threat Distribution</span>
+          <span class="text-[10px] font-mono text-slate-500">Decisions</span>
+        </div>
+        <div class="relative h-44 mt-2">
+          <canvas id="threatDistChart"></canvas>
+          <div id="threatDistEmpty" class="absolute inset-0 flex items-center justify-center font-mono text-xs text-slate-500 bg-socCard/80">
+            WAITING FOR TELEMETRY
+          </div>
+        </div>
+      </div>
+
+      <!-- 9. Protocol Breakdown -->
+      <div class="bg-socCard p-4 rounded-lg border border-socBorder shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between border-b border-socBorder pb-2">
+          <span class="text-xs font-mono font-semibold text-slate-300 uppercase tracking-wider">Protocol Breakdown</span>
+          <span class="text-[10px] font-mono text-slate-500">L4 Framing</span>
+        </div>
+        <div class="relative h-44 mt-2">
+          <canvas id="protocolChart"></canvas>
+          <div id="protocolEmpty" class="absolute inset-0 flex items-center justify-center font-mono text-xs text-slate-500 bg-socCard/80">
+            WAITING FOR TELEMETRY
+          </div>
+        </div>
+      </div>
+
+      <!-- 10. Top Source Hosts -->
+      <div class="bg-socCard p-4 rounded-lg border border-socBorder shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between border-b border-socBorder pb-2">
+          <span class="text-xs font-mono font-semibold text-slate-300 uppercase tracking-wider">Top Source IPs</span>
+          <span class="text-[10px] font-mono text-slate-500">Originators</span>
+        </div>
+        <div id="topSourcesList" class="space-y-2 mt-2 font-mono text-xs max-h-44 overflow-y-auto">
+          <div class="py-12 text-center text-slate-500">WAITING FOR TELEMETRY</div>
+        </div>
+      </div>
+
+      <!-- 10. Top Destination Hosts & Active Ports -->
+      <div class="bg-socCard p-4 rounded-lg border border-socBorder shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between border-b border-socBorder pb-2">
+          <span class="text-xs font-mono font-semibold text-slate-300 uppercase tracking-wider">Top Targets &amp; Ports</span>
+          <span class="text-[10px] font-mono text-slate-500">Services</span>
+        </div>
+        <div id="topDestinationsList" class="space-y-2 mt-2 font-mono text-xs max-h-44 overflow-y-auto">
+          <div class="py-12 text-center text-slate-500">WAITING FOR TELEMETRY</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 6 & 11. LIVE THREAT FEED & ATTACK TIMELINE TABS -->
+    <!-- ============================================================ -->
+    <section class="bg-socCard border border-socBorder rounded-lg overflow-hidden shadow">
+      <!-- Section Header with Filter Toolbar & Tab Switcher -->
+      <div class="p-3.5 px-4 border-b border-socBorder flex flex-wrap items-center justify-between gap-3 bg-slate-900/40">
+        <div class="flex items-center gap-3">
+          <!-- Tab Buttons -->
+          <div class="flex items-center gap-1 bg-slate-950 p-1 rounded-md border border-slate-800">
+            <button id="tabBtnFeed" onclick="switchFeedTab('feed')" class="px-3 py-1 text-xs font-mono font-semibold rounded bg-indigo-600 text-white shadow">
+              Live Threat Feed (<span id="feedLiveCount">0</span>/100)
+            </button>
+            <button id="tabBtnTimeline" onclick="switchFeedTab('timeline')" class="px-3 py-1 text-xs font-mono font-semibold rounded text-slate-400 hover:text-white transition">
+              Attack Timeline (<span id="timelineCount">0</span>)
+            </button>
+            <button id="tabBtnHistory" onclick="switchFeedTab('history')" class="px-3 py-1 text-xs font-mono font-semibold rounded text-slate-400 hover:text-white transition flex items-center gap-1.5">
+              <span>Flow History</span>
+              <span id="storageTotalBadge" class="px-1.5 py-0.2 rounded text-[10px] bg-slate-800 text-indigo-300 font-bold border border-slate-700">0</span>
+            </button>
+            <button id="tabBtnIncidents" onclick="switchFeedTab('incidents')" class="px-3 py-1 text-xs font-mono font-semibold rounded text-slate-400 hover:text-white transition flex items-center gap-1.5">
+              <span>Incident History</span>
+              <span id="storageIncidentsBadge" class="px-1.5 py-0.2 rounded text-[10px] bg-rose-950/80 text-rose-300 border border-rose-800/60 font-bold">0</span>
+            </button>
+          </div>
+          <span class="text-xs text-slate-400 font-mono hidden sm:inline">&bull; Click any entry to inspect forensic audit</span>
+        </div>
+
+        <!-- Filter Controls -->
+        <div class="flex items-center gap-2.5 flex-wrap font-mono text-xs">
+          <!-- Text Search Box -->
+          <div class="relative">
+            <input type="text" id="filterSearch" oninput="applyFilters()" placeholder="Filter IP, port, proto, attack..." class="bg-slate-950 border border-socBorder rounded px-2.5 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-56" />
+          </div>
+          <!-- Severity Filter Dropdown -->
+          <select id="filterSeverity" onchange="applyFilters()" class="bg-slate-950 border border-socBorder rounded px-2.5 py-1 text-xs text-slate-300 focus:outline-none">
+            <option value="ALL">All Decisions</option>
+            <option value="THREATS_ONLY">Threats Only (Non-Normal)</option>
+            <option value="UNKNOWN_ONLY">Zero-Day / Unknown Only</option>
+            <option value="CRITICAL_ONLY">Critical / High Risk Only</option>
+            <option value="NORMAL_ONLY">Normal Only</option>
+          </select>
+          <button id="btnClearTableBtn" onclick="clearLiveFeedOnly()" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-socBorder">
+            Clear Feed
+          </button>
+        </div>
+      </div>
+
+      <!-- Feed Tab: Dense Tabular Security Event Feed (Bounded Working Set) -->
+      <div id="tabContentFeed" class="overflow-x-auto max-h-[580px] overflow-y-auto">
+        <table class="w-full text-left text-xs whitespace-nowrap">
+          <thead class="bg-slate-900/95 sticky top-0 text-slate-400 font-mono uppercase tracking-wider border-b border-socBorder z-10">
+            <tr>
+              <th class="py-2.5 px-3.5">Time</th>
+              <th class="py-2.5 px-3.5">Source &rarr; Destination</th>
+              <th class="py-2.5 px-3.5">Proto</th>
+              <th class="py-2.5 px-3.5">Prediction</th>
+              <th class="py-2.5 px-3.5">Confidence</th>
+              <th class="py-2.5 px-3.5">Anomaly Score</th>
+              <th class="py-2.5 px-3.5">Risk</th>
+              <th class="py-2.5 px-3.5">Security Decision</th>
+              <th class="py-2.5 px-3.5">Action</th>
+              <th class="py-2.5 px-3.5">Audit Reason</th>
+            </tr>
+          </thead>
+          <tbody id="eventTableBody" class="divide-y divide-slate-800/60 font-mono text-xs">
+            <tr id="tableEmptyRow">
+              <td colspan="10" class="py-16 text-center text-slate-500 font-mono">
+                WAITING FOR TELEMETRY &bull; INGESTION ENGINE STANDING BY
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Timeline Tab: Chronological Attack Timeline View -->
+      <div id="tabContentTimeline" class="hidden p-4 max-h-[580px] overflow-y-auto space-y-3 font-mono text-xs">
+        <div id="timelineContainer" class="space-y-3">
+          <div class="py-16 text-center text-slate-500 font-mono">
+            NO THREAT EVENTS RECORDED YET
+          </div>
+        </div>
+      </div>
+
+      <!-- Flow History Tab: Paginated Historical Browser from Persistent JSON Storage -->
+      <div id="tabContentHistory" class="hidden flex flex-col">
+        <!-- Pagination & Actions Subheader -->
+        <div class="p-2.5 px-4 bg-slate-900/70 border-b border-socBorder flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+          <div class="flex items-center gap-2">
+            <span class="text-slate-400">Page</span>
+            <span class="font-bold text-white px-2 py-0.5 rounded bg-slate-800 border border-slate-700" id="histPageNum">1</span>
+            <span class="text-slate-400">of <strong class="text-white" id="histTotalPages">1</strong></span>
+            <span class="text-slate-600">&bull;</span>
+            <span class="text-slate-400">Persisted Flows: <strong class="text-indigo-400 font-bold" id="histTotalRecords">0</strong></span>
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="text-slate-400">Page Size:</label>
+            <select id="histPageSize" onchange="changeHistoryPageSize(this.value)" class="bg-slate-950 border border-socBorder rounded px-2 py-1 text-slate-300 focus:outline-none">
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+            </select>
+            <div class="flex items-center gap-1">
+              <button onclick="navigateHistoryPage('first')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-socBorder">&laquo;</button>
+              <button onclick="navigateHistoryPage('prev')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-socBorder">&lsaquo; Prev</button>
+              <button onclick="navigateHistoryPage('next')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-socBorder">Next &rsaquo;</button>
+              <button onclick="navigateHistoryPage('last')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-socBorder">&raquo;</button>
+            </div>
+            <button onclick="exportHistoryJson()" class="px-2.5 py-1 rounded bg-indigo-600/80 hover:bg-indigo-600 text-white border border-indigo-500/50 flex items-center gap-1 font-semibold">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Export JSON
+            </button>
+            <button onclick="clearPersistentHistory()" class="px-2 py-1 rounded bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/60">
+              Clear Storage
+            </button>
+          </div>
+        </div>
+
+        <!-- History Table -->
+        <div class="overflow-x-auto max-h-[520px] overflow-y-auto">
+          <table class="w-full text-left text-xs whitespace-nowrap font-mono">
+            <thead class="bg-slate-900/95 sticky top-0 text-slate-400 uppercase tracking-wider border-b border-socBorder z-10">
+              <tr>
+                <th class="py-2.5 px-3.5">Time</th>
+                <th class="py-2.5 px-3.5">Source &rarr; Destination</th>
+                <th class="py-2.5 px-3.5">Proto</th>
+                <th class="py-2.5 px-3.5">Prediction</th>
+                <th class="py-2.5 px-3.5">Confidence</th>
+                <th class="py-2.5 px-3.5">Anomaly Score</th>
+                <th class="py-2.5 px-3.5">Risk</th>
+                <th class="py-2.5 px-3.5">Security Decision</th>
+                <th class="py-2.5 px-3.5">Action</th>
+                <th class="py-2.5 px-3.5">Audit Reason</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody" class="divide-y divide-slate-800/60">
+              <tr>
+                <td colspan="10" class="py-16 text-center text-slate-500">
+                  NO HISTORICAL FLOWS PERSISTED YET
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Incident History Tab: Paginated Historical Incidents from Persistent JSON Storage -->
+      <div id="tabContentIncidents" class="hidden flex flex-col">
+        <!-- Pagination & Actions Subheader -->
+        <div class="p-2.5 px-4 bg-slate-900/70 border-b border-socBorder flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+          <div class="flex items-center gap-2">
+            <span class="text-rose-400 font-bold uppercase">Incident History</span>
+            <span class="text-slate-600">&bull;</span>
+            <span class="text-slate-400">Page <strong class="text-white" id="incPageNum">1</strong> of <strong class="text-white" id="incTotalPages">1</strong></span>
+            <span class="text-slate-600">&bull;</span>
+            <span class="text-slate-400">Total Recorded Incidents: <strong class="text-rose-400 font-bold" id="incTotalRecords">0</strong></span>
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="text-slate-400">Page Size:</label>
+            <select id="incPageSize" onchange="changeIncidentPageSize(this.value)" class="bg-slate-950 border border-socBorder rounded px-2 py-1 text-slate-300 focus:outline-none">
+              <option value="25">25</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+            </select>
+            <div class="flex items-center gap-1">
+              <button onclick="navigateIncidentPage('first')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-socBorder">&laquo;</button>
+              <button onclick="navigateIncidentPage('prev')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-socBorder">&lsaquo; Prev</button>
+              <button onclick="navigateIncidentPage('next')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-socBorder">Next &rsaquo;</button>
+              <button onclick="navigateIncidentPage('last')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-socBorder">&raquo;</button>
+            </div>
+            <button onclick="exportIncidentsJson()" class="px-2.5 py-1 rounded bg-rose-900/80 hover:bg-rose-900 text-rose-200 border border-rose-700/60 flex items-center gap-1 font-semibold">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Export Incidents JSON
+            </button>
+          </div>
+        </div>
+
+        <!-- Incidents Table -->
+        <div class="overflow-x-auto max-h-[520px] overflow-y-auto">
+          <table class="w-full text-left text-xs whitespace-nowrap font-mono">
+            <thead class="bg-slate-900/95 sticky top-0 text-slate-400 uppercase tracking-wider border-b border-socBorder z-10">
+              <tr>
+                <th class="py-2.5 px-3.5">Time</th>
+                <th class="py-2.5 px-3.5">Source &rarr; Destination</th>
+                <th class="py-2.5 px-3.5">Proto</th>
+                <th class="py-2.5 px-3.5">Prediction</th>
+                <th class="py-2.5 px-3.5">Confidence</th>
+                <th class="py-2.5 px-3.5">Anomaly Score</th>
+                <th class="py-2.5 px-3.5">Risk</th>
+                <th class="py-2.5 px-3.5">Security Decision</th>
+                <th class="py-2.5 px-3.5">Action</th>
+                <th class="py-2.5 px-3.5">Audit Reason</th>
+              </tr>
+            </thead>
+            <tbody id="incidentTableBody" class="divide-y divide-slate-800/60">
+              <tr>
+                <td colspan="10" class="py-16 text-center text-slate-500">
+                  NO INCIDENTS RECORDED YET
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============================================================ -->
+  <!-- 7. FLOW SECURITY AUDIT INSPECTION MODAL (READ-ONLY) -->
+  <!-- ============================================================ -->
+  <div id="auditModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div class="bg-socCard border border-socBorder rounded-xl max-w-3xl w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+      <div class="flex items-center justify-between border-b border-socBorder pb-3.5">
+        <div class="flex items-center gap-2.5">
+          <div class="h-7 w-7 rounded bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 font-bold">
+            &sect;
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-white uppercase tracking-wider font-mono">Forensic Flow Security Audit</h3>
+            <p class="text-[11px] text-slate-400 font-mono" id="modalFlowId">flow-0000</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="copyModalJson()" class="px-2.5 py-1 text-xs font-mono rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-socBorder flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            Copy JSON
+          </button>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-white text-xl px-2 font-mono">&times;</button>
+        </div>
+      </div>
+
+      <!-- Modal Body Sections -->
+      <div id="modalBody" class="space-y-4 text-xs font-mono">
+        <!-- Injected Dynamically -->
+      </div>
+
+      <div class="flex justify-between items-center border-t border-socBorder pt-3 text-[11px] font-mono text-slate-500">
+        <span>READ-ONLY FORENSIC AUDIT RECORD &bull; SOURCE OF TRUTH: BACKEND</span>
+        <button onclick="closeModal()" class="px-4 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold border border-socBorder">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 z-50 space-y-2 pointer-events-none"></div>
+
+  <!-- ============================================================ -->
+  <!-- 13 & 15. JAVASCRIPT SOC CLIENT & TELEMETRY ENGINE -->
+  <!-- ============================================================ -->
+  <script>
+    // ============================================================
+    // CONFIGURATION & BOUNDED WORKING SET LIMITS
+    // ============================================================
+    const LIVE_MEMORY_LIMIT = 200;       // Max flows retained in live JavaScript RAM
+    const CHART_POINT_LIMIT = 100;       // Max points per timeseries chart
+    const FEED_DOM_LIMIT = 100;          // Max DOM rows in Live Threat Feed table
+    const TIMELINE_DOM_LIMIT = 40;       // Max threat cards in live timeline view
+    const STORAGE_MAX_RECORDS = 50000;   // Configurable persistent storage capacity
+    const MAP_MAX_ENTRIES = 250;         // Max frequency map entries before frequency pruning
+
+    // System & Connection State
+    let ws = null;
+    let wsReconnectTimeout = null;
+    let wsRetryCount = 0;
+    let isReplaying = false;
+    let activeMode = 'live';
+    let anomalyThreshold = 1.3728;
+    let currentModalAlert = null;
+    let currentFeedTab = 'feed';
+
+    // Bounded In-Memory Live Working Sets
+    const liveFlows = [];               // Bounded to LIVE_MEMORY_LIMIT
+    const liveThreats = [];             // Bounded to TIMELINE_DOM_LIMIT
+
+    // O(1) Ring Buffer for Message De-duplication
+    const seenFlowKeys = new Set();
+    const seenKeysQueue = [];
+    function checkAndMarkSeen(key) {
+      if (!key) return false;
+      if (seenFlowKeys.has(key)) return true;
+      seenFlowKeys.add(key);
+      seenKeysQueue.push(key);
+      if (seenKeysQueue.length > 500) {
+        const oldest = seenKeysQueue.shift();
+        seenFlowKeys.delete(oldest);
+      }
+      return false;
+    }
+
+    // Incremental KPI & Telemetry Counters (Maintained in O(1))
+    let incTotalFlows = 0;
+    let incNormalCount = 0;
+    let incSuspiciousCount = 0;
+    let incMaliciousCount = 0;
+    let incUnknownCount = 0;
+    let incCriticalCount = 0;
+    let incHighRiskCount = 0;
+    let incAnomalyCount = 0;
+    let incCumPackets = 0;
+    let incCumBytes = 0;
+
+    // Bounded Frequency Trackers (Sources, Destinations, Ports, Protocols)
+    const srcIpCounts = new Map();
+    const dstIpCounts = new Map();
+    const portCounts = new Map();
+    const protoCounts = { TCP: 0, UDP: 0, ICMP: 0, OTHER: 0 };
+    const decisionCounts = { NORMAL: 0, SUSPICIOUS: 0, MALICIOUS: 0, 'UNKNOWN ATTACK': 0, CRITICAL: 0 };
+
+    function trackFrequency(map, key) {
+      if (!key || key === '-') return;
+      map.set(key, (map.get(key) || 0) + 1);
+      if (map.size > MAP_MAX_ENTRIES) {
+        // Prune the lowest-frequency entries to strictly bound memory
+        const sorted = Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, MAP_MAX_ENTRIES - 50);
+        map.clear();
+        for (const [k, v] of sorted) map.set(k, v);
+      }
+    }
+
+    // Chart.js Instances & Bounded Data Queues
+    let anomalyChartInstance = null;
+    let riskChartInstance = null;
+    let threatDistChartInstance = null;
+    let protocolChartInstance = null;
+
+    const anomalyChartData = { labels: [], values: [], colors: [], summaries: [] };
+    const riskChartData = { labels: [], values: [], colors: [], summaries: [] };
+
+    // Historical Pagination State
+    let currentHistoryPage = 1;
+    let historyPageSize = 50;
+    let currentIncidentPage = 1;
+    let incidentPageSize = 50;
+
+    // Request Animation Frame Throttle Handle
+    let renderScheduled = false;
+
+    // Protocol & Base URL Auto-detection (supports http://localhost:8000 and file:///)
+    const isFileProto = window.location.protocol === 'file:';
+    const apiBase = isFileProto ? 'http://localhost:8000' : '';
+    const wsBase = isFileProto
+      ? 'ws://localhost:8000'
+      : (window.location.protocol === 'https:' ? `wss://${window.location.host}` : `ws://${window.location.host}`);
+
+    // ============================================================
+    // PERSISTENT JSON STORAGE SERVICE LAYER (IndexedDB + JSON Fallback)
+    // ============================================================
+    class FlowStorageService {
+      constructor(dbName = 'nids_soc_telemetry_db', maxRecords = STORAGE_MAX_RECORDS) {
+        this.dbName = dbName;
+        this.maxRecords = maxRecords;
+        this.db = null;
+        this.isReady = false;
+        this.pendingWrites = [];
+        this.flushTimeout = null;
+        this.totalCount = 0;
+        this.incidentCount = 0;
+        // Memory fallback ring buffer if IndexedDB is blocked
+        this.fallbackStore = [];
+        this.fallbackIdMap = new Map();
+        this.init();
+      }
+
+      async init() {
+        if (typeof window === 'undefined' || !window.indexedDB) {
+          console.warn('[STORAGE] IndexedDB unavailable; using in-memory JSON ring storage');
+          this.isReady = true;
+          return;
+        }
+        return new Promise((resolve) => {
+          try {
+            const req = window.indexedDB.open(this.dbName, 1);
+            req.onupgradeneeded = (e) => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains('flows')) {
+                const store = db.createObjectStore('flows', { keyPath: 'flow_id' });
+                store.createIndex('timestamp', 'timestamp', { unique: false });
+                store.createIndex('decision', 'decision', { unique: false });
+                store.createIndex('risk_score', 'risk_score', { unique: false });
+                store.createIndex('_is_threat', '_is_threat', { unique: false });
+                store.createIndex('_seq', '_seq', { unique: false });
+              }
+            };
+            req.onsuccess = (e) => {
+              this.db = e.target.result;
+              this.isReady = true;
+              this.refreshCounts();
+              resolve();
+            };
+            req.onerror = (e) => {
+              console.warn('[STORAGE] IndexedDB open notice; using JSON ring fallback:', e);
+              this.isReady = true;
+              resolve();
+            };
+          } catch (err) {
+            console.warn('[STORAGE] IndexedDB init caught error:', err);
+            this.isReady = true;
+            resolve();
+          }
+        });
+      }
+
+      async refreshCounts() {
+        if (!this.db) {
+          this.totalCount = this.fallbackStore.length;
+          this.incidentCount = this.fallbackStore.filter(f => f._is_threat).length;
+          updateStorageBadges();
+          return;
+        }
+        try {
+          const tx = this.db.transaction('flows', 'readonly');
+          const store = tx.objectStore('flows');
+          const countReq = store.count();
+          countReq.onsuccess = () => {
+            this.totalCount = countReq.result || 0;
+            updateStorageBadges();
+          };
+          const threatIdx = store.index('_is_threat');
+          const threatCountReq = threatIdx.count(IDBKeyRange.only(1));
+          threatCountReq.onsuccess = () => {
+            this.incidentCount = threatCountReq.result || 0;
+            updateStorageBadges();
+          };
+        } catch (_) {}
+      }
+
+      save(flow) {
+        if (!flow || !flow.flow_id) return;
+        const isThreat = (flow.decision && flow.decision !== 'NORMAL') || Boolean(flow.anomaly) || (Number(flow.risk_score || 0) >= 60);
+        this.totalCount++;
+        if (isThreat) this.incidentCount++;
+
+        const enriched = {
+          ...flow,
+          _seq: Date.now() * 1000 + (this.totalCount % 1000),
+          _is_threat: isThreat ? 1 : 0
+        };
+
+        this.pendingWrites.push(enriched);
+
+        if (this.pendingWrites.length >= 40) {
+          this.flushWrites();
+        } else if (!this.flushTimeout) {
+          this.flushTimeout = setTimeout(() => this.flushWrites(), 80);
+        }
+      }
+
+      async flushWrites() {
+        if (this.flushTimeout) {
+          clearTimeout(this.flushTimeout);
+          this.flushTimeout = null;
+        }
+        if (this.pendingWrites.length === 0) return;
+        const batch = this.pendingWrites;
+        this.pendingWrites = [];
+
+        if (this.db) {
+          try {
+            const tx = this.db.transaction('flows', 'readwrite');
+            const store = tx.objectStore('flows');
+            for (let i = 0; i < batch.length; i++) {
+              store.put(batch[i]);
+            }
+            tx.oncomplete = () => {
+              updateStorageBadges();
+              if (this.totalCount > this.maxRecords) {
+                this.prune();
+              }
+            };
+            return;
+          } catch (e) {
+            console.warn("[STORAGE] IndexedDB transaction error, using fallback:", e);
+          }
+        }
+
+        // Fallback in-memory JSON ring buffer
+        for (let i = 0; i < batch.length; i++) {
+          const item = batch[i];
+          if (!this.fallbackIdMap.has(item.flow_id)) {
+            this.fallbackStore.unshift(item);
+            this.fallbackIdMap.set(item.flow_id, item);
+          }
+        }
+        if (this.fallbackStore.length > this.maxRecords) {
+          const removed = this.fallbackStore.splice(this.maxRecords);
+          for (let i = 0; i < removed.length; i++) {
+            this.fallbackIdMap.delete(removed[i].flow_id);
+          }
+        }
+        updateStorageBadges();
+      }
+
+      async prune() {
+        if (!this.db) return;
+        try {
+          const count = this.totalCount;
+          if (count <= this.maxRecords) return;
+          const excess = count - this.maxRecords;
+          const tx = this.db.transaction('flows', 'readwrite');
+          const store = tx.objectStore('flows');
+          const idx = store.index('_seq');
+          let deleted = 0;
+          idx.openCursor().onsuccess = (e) => {
+            const cursor = e.target.result;
+            if (cursor && deleted < excess) {
+              cursor.delete();
+              deleted++;
+              cursor.continue();
+            } else {
+              this.refreshCounts();
+            }
+          };
+        } catch (_) {}
+      }
+
+      async getPage({ page = 1, pageSize = 50, query = '', severity = 'ALL', threatOnly = false } = {}) {
+        await this.flushWrites();
+        const q = (query || '').toLowerCase().trim();
+
+        // 1. IndexedDB Query with Cursor
+        if (this.db) {
+          return new Promise((resolve) => {
+            try {
+              const tx = this.db.transaction('flows', 'readonly');
+              const store = tx.objectStore('flows');
+              const idx = store.index('_seq');
+              const req = idx.openCursor(null, 'prev'); // Newest first
+
+              const records = [];
+              let totalMatches = 0;
+              const skip = (page - 1) * pageSize;
+
+              req.onsuccess = (e) => {
+                const cursor = e.target.result;
+                if (!cursor) {
+                  const totalPages = Math.max(1, Math.ceil(totalMatches / pageSize));
+                  resolve({
+                    records,
+                    page: Math.max(1, Math.min(page, totalPages)),
+                    pageSize,
+                    totalMatches,
+                    totalPages
+                  });
+                  return;
+                }
+
+                const flow = cursor.value;
+                if (matchesFilter(flow, q, severity, threatOnly)) {
+                  totalMatches++;
+                  if (totalMatches > skip && records.length < pageSize) {
+                    records.push(flow);
+                  }
+                }
+                cursor.continue();
+              };
+
+              req.onerror = () => {
+                resolve(this.queryFallbackStore(page, pageSize, q, severity, threatOnly));
+              };
+            } catch (_) {
+              resolve(this.queryFallbackStore(page, pageSize, q, severity, threatOnly));
+            }
+          });
+        }
+
+        // 2. Fallback store query
+        return this.queryFallbackStore(page, pageSize, q, severity, threatOnly);
+      }
+
+      queryFallbackStore(page, pageSize, q, severity, threatOnly) {
+        const matches = this.fallbackStore.filter(f => matchesFilter(f, q, severity, threatOnly));
+        const totalMatches = matches.length;
+        const totalPages = Math.max(1, Math.ceil(totalMatches / pageSize));
+        const validPage = Math.max(1, Math.min(page, totalPages));
+        const offset = (validPage - 1) * pageSize;
+        const records = matches.slice(offset, offset + pageSize);
+        return { records, page: validPage, pageSize, totalMatches, totalPages };
+      }
+
+      async getIncidents({ page = 1, pageSize = 50, query = '' } = {}) {
+        return this.getPage({ page, pageSize, query, severity: 'THREATS_ONLY', threatOnly: true });
+      }
+
+      async getFlowById(flowId) {
+        if (!flowId) return null;
+        // Check write buffer first
+        const pending = this.pendingWrites.find(f => f.flow_id === flowId);
+        if (pending) return pending;
+
+        if (this.db) {
+          return new Promise((resolve) => {
+            try {
+              const tx = this.db.transaction('flows', 'readonly');
+              const store = tx.objectStore('flows');
+              const req = store.get(flowId);
+              req.onsuccess = () => resolve(req.result || null);
+              req.onerror = () => resolve(null);
+            } catch (_) {
+              resolve(this.fallbackIdMap.get(flowId) || null);
+            }
+          });
+        }
+        return this.fallbackIdMap.get(flowId) || null;
+      }
+
+      async clear() {
+        this.pendingWrites = [];
+        this.fallbackStore = [];
+        this.fallbackIdMap.clear();
+        this.totalCount = 0;
+        this.incidentCount = 0;
+        if (this.db) {
+          try {
+            const tx = this.db.transaction('flows', 'readwrite');
+            tx.objectStore('flows').clear();
+          } catch (_) {}
+        }
+        updateStorageBadges();
+      }
+
+      async exportAsJson(maxRecords = 5000, threatOnly = false) {
+        const res = await this.getPage({ page: 1, pageSize: maxRecords, threatOnly });
+        const jsonStr = JSON.stringify(res.records, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = threatOnly ? `nids_incident_history_${Date.now()}.json` : `nids_flow_history_${Date.now()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    // Shared Filter Predicate
+    function matchesFilter(flow, query, severity, threatOnly) {
+      if (threatOnly && !flow._is_threat && flow.decision === 'NORMAL') return false;
+      if (severity === 'THREATS_ONLY' && flow.decision === 'NORMAL') return false;
+      if (severity === 'UNKNOWN_ONLY' && flow.decision !== 'UNKNOWN ATTACK') return false;
+      if (severity === 'CRITICAL_ONLY' && flow.decision !== 'CRITICAL' && flow.decision !== 'MALICIOUS') return false;
+      if (severity === 'NORMAL_ONLY' && flow.decision !== 'NORMAL') return false;
+
+      if (query) {
+        const src = (flow.src_ip || '').toLowerCase();
+        const dst = (flow.dst_ip || '').toLowerCase();
+        const proto = (flow.protocol || '').toLowerCase();
+        const pred = (flow.prediction || '').toLowerCase();
+        const dec = (flow.decision || '').toLowerCase();
+        const fid = (flow.flow_id || '').toLowerCase();
+        if (!src.includes(query) && !dst.includes(query) && !proto.includes(query) && !pred.includes(query) && !dec.includes(query) && !fid.includes(query)) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    // Instantiate Persistent Flow Storage
+    const flowStorage = new FlowStorageService('nids_soc_telemetry_db', STORAGE_MAX_RECORDS);
+
+    function updateStorageBadges() {
+      const totBadge = document.getElementById('storageTotalBadge');
+      if (totBadge) totBadge.innerText = flowStorage.totalCount.toLocaleString();
+
+      const incBadge = document.getElementById('storageIncidentsBadge');
+      if (incBadge) incBadge.innerText = flowStorage.incidentCount.toLocaleString();
+
+      const liveBadge = document.getElementById('feedLiveCount');
+      if (liveBadge) liveBadge.innerText = liveFlows.length;
+
+      const timelineCount = document.getElementById('timelineCount');
+      if (timelineCount) timelineCount.innerText = liveThreats.length;
+    }
+
+    // ============================================================
+    // CHARTS SETUP
+    // ============================================================
+    function initCharts() {
+      // 1. Anomaly Chart (AE-DSP)
+      const ctxAnom = document.getElementById('anomalyChart').getContext('2d');
+      anomalyChartInstance = new Chart(ctxAnom, {
+        type: 'line',
+        data: {
+          labels: anomalyChartData.labels,
+          datasets: [
+            {
+              label: 'Anomaly Score',
+              data: anomalyChartData.values,
+              pointBackgroundColor: anomalyChartData.colors,
+              pointBorderColor: anomalyChartData.colors,
+              pointRadius: 3.5,
+              pointHoverRadius: 6,
+              borderColor: 'rgba(168, 85, 247, 0.7)',
+              borderWidth: 1.5,
+              fill: false,
+              tension: 0.2,
+            },
+            {
+              label: 'Threshold',
+              data: [],
+              borderColor: 'rgba(239, 68, 68, 0.85)',
+              borderWidth: 1.5,
+              borderDash: [5, 4],
+              pointRadius: 0,
+              fill: false,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false, // Disabled animation for high-throughput zero-latency streaming
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              titleColor: '#f1f5f9',
+              bodyColor: '#cbd5e1',
+              borderColor: '#334155',
+              borderWidth: 1,
+              bodyFont: { family: 'ui-monospace' },
+              titleFont: { family: 'ui-monospace' },
+              callbacks: {
+                label: (ctx) => {
+                  const s = anomalyChartData.summaries[ctx.dataIndex];
+                  if (!s) return `Score: ${ctx.parsed.y}`;
+                  return [
+                    `Score: ${Number(s.score).toFixed(4)} (Thresh: ${s.thresh})`,
+                    `Decision: ${s.dec} • Pred: ${s.pred}`,
+                    `Flow: ${s.src} → ${s.dst}`
+                  ];
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: '#1e293b' },
+              ticks: { color: '#64748b', font: { family: 'ui-monospace', size: 10 }, maxTicksLimit: 12 }
+            },
+            y: {
+              grid: { color: '#1e293b' },
+              ticks: { color: '#64748b', font: { family: 'ui-monospace', size: 10 } },
+              suggestedMin: -0.5,
+              suggestedMax: 3.0,
+            }
+          }
+        }
+      });
+
+      // 2. Risk Trend Chart
+      const ctxRisk = document.getElementById('riskChart').getContext('2d');
+      riskChartInstance = new Chart(ctxRisk, {
+        type: 'line',
+        data: {
+          labels: riskChartData.labels,
+          datasets: [{
+            label: 'Risk Score',
+            data: riskChartData.values,
+            borderColor: '#ef4444',
+            borderWidth: 2,
+            pointBackgroundColor: riskChartData.colors,
+            pointBorderColor: riskChartData.colors,
+            pointRadius: 3.5,
+            pointHoverRadius: 6,
+            fill: true,
+            backgroundColor: 'rgba(239, 68, 68, 0.08)',
+            tension: 0.25,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              titleColor: '#f1f5f9',
+              bodyColor: '#cbd5e1',
+              borderColor: '#334155',
+              borderWidth: 1,
+              bodyFont: { family: 'ui-monospace' },
+              titleFont: { family: 'ui-monospace' },
+              callbacks: {
+                label: (ctx) => {
+                  const s = riskChartData.summaries[ctx.dataIndex];
+                  if (!s) return `Risk: ${ctx.parsed.y}`;
+                  return [
+                    `Risk Score: ${Number(s.risk).toFixed(1)} / 100`,
+                    `Decision: ${s.dec} • Action: ${s.act}`
+                  ];
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: '#1e293b' },
+              ticks: { color: '#64748b', font: { family: 'ui-monospace', size: 10 }, maxTicksLimit: 10 }
+            },
+            y: {
+              min: 0,
+              max: 100,
+              grid: { color: '#1e293b' },
+              ticks: { color: '#64748b', font: { family: 'ui-monospace', size: 10 } }
+            }
+          }
+        }
+      });
+
+      // 3. Threat Distribution Doughnut Chart
+      const ctxThreat = document.getElementById('threatDistChart').getContext('2d');
+      threatDistChartInstance = new Chart(ctxThreat, {
+        type: 'doughnut',
+        data: {
+          labels: ['NORMAL', 'SUSPICIOUS', 'MALICIOUS', 'UNKNOWN ATTACK', 'CRITICAL'],
+          datasets: [{
+            data: [0, 0, 0, 0, 0],
+            backgroundColor: [
+              'rgba(16, 185, 129, 0.8)',
+              'rgba(245, 158, 11, 0.8)',
+              'rgba(239, 68, 68, 0.8)',
+              'rgba(168, 85, 247, 0.8)',
+              'rgba(236, 72, 153, 0.8)',
+            ],
+            borderColor: '#0f172a',
+            borderWidth: 2,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: { color: '#94a3b8', font: { family: 'ui-monospace', size: 9 }, boxWidth: 10 }
+            }
+          },
+          cutout: '70%',
+        }
+      });
+
+      // 4. Protocol Breakdown Doughnut Chart
+      const ctxProto = document.getElementById('protocolChart').getContext('2d');
+      protocolChartInstance = new Chart(ctxProto, {
+        type: 'doughnut',
+        data: {
+          labels: ['TCP', 'UDP', 'ICMP', 'OTHER'],
+          datasets: [{
+            data: [0, 0, 0, 0],
+            backgroundColor: [
+              'rgba(59, 130, 246, 0.8)',
+              'rgba(6, 182, 212, 0.8)',
+              'rgba(234, 179, 8, 0.8)',
+              'rgba(148, 163, 184, 0.8)',
+            ],
+            borderColor: '#0f172a',
+            borderWidth: 2,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: { color: '#94a3b8', font: { family: 'ui-monospace', size: 9 }, boxWidth: 10 }
+            }
+          },
+          cutout: '70%',
+        }
+      });
+    }
+
+    // ============================================================
+    // WEBSOCKET CLIENT & STATE RECOVERY
+    // ============================================================
+    function setWsStatus(state, label, color) {
+      const dot = document.getElementById('wsDot');
+      const text = document.getElementById('wsText');
+      if (dot) dot.className = `h-2 w-2 rounded-full bg-${color}-500 ${state === 'CONNECTED' ? '' : 'animate-pulse'}`;
+      if (text) {
+        text.className = `font-semibold text-${color}-300`;
+        text.innerText = label;
+      }
+    }
+
+    function initWebSocket() {
+      if (ws) {
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onclose = null;
+        ws.onerror = null;
+        try { ws.close(); } catch (_) {}
+        ws = null;
+      }
+
+      const wsUrl = `${wsBase}/ws`;
+      setWsStatus('CONNECTING', 'CONNECTING...', 'amber');
+
+      try {
+        ws = new WebSocket(wsUrl);
+      } catch (err) {
+        console.warn("WebSocket init error:", err);
+        setWsStatus('DISCONNECTED', 'DISCONNECTED', 'rose');
+        wsReconnectTimeout = setTimeout(initWebSocket, 3000);
+        return;
+      }
+
+      ws.onopen = () => {
+        wsRetryCount = 0;
+        setWsStatus('CONNECTED', 'CONNECTED', 'emerald');
+        showToast('WebSocket connected to NIDS SOC telemetry', 'success');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          if (event.data === 'pong') return;
+          const msg = JSON.parse(event.data);
+
+          if (msg.type === 'flow_alert') {
+            if (msg.data) ingestFlowAlert(msg.data, true);
+            if (msg.stats) updateStatsDisplay(msg.stats);
+          } else if (msg.type === 'initial_state') {
+            if (msg.stats) updateStatsDisplay(msg.stats);
+            if (Array.isArray(msg.recent_alerts)) {
+              // Ingest recent alerts oldest-first
+              const reversed = [...msg.recent_alerts].reverse();
+              reversed.forEach(a => ingestFlowAlert(a, false));
+            }
+          } else if (msg.type === 'mode_changed') {
+            clearLiveFeedOnly();
+            if (msg.stats) updateStatsDisplay(msg.stats);
+            showToast(`Operating mode switched to ${msg.mode_name || msg.mode}`, 'info');
+          } else if (msg.type === 'reset') {
+            resetLocalState();
+            if (msg.stats) updateStatsDisplay(msg.stats);
+            showToast('Telemetry counters reset', 'info');
+          }
+        } catch (e) {
+          console.error("Malformed WebSocket payload received:", e);
+        }
+      };
+
+      ws.onclose = () => {
+        wsRetryCount++;
+        const nextDelay = Math.min(10000, 1000 * Math.pow(1.5, wsRetryCount));
+        setWsStatus('DISCONNECTED', `RECONNECTING (#${wsRetryCount})...`, 'rose');
+        wsReconnectTimeout = setTimeout(initWebSocket, nextDelay);
+      };
+
+      ws.onerror = () => {
+        setWsStatus('DISCONNECTED', 'DISCONNECTED', 'rose');
+        try { ws.close(); } catch (_) {}
+      };
+    }
+
+    // Keepalive ping
+    setInterval(() => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('ping');
+      }
+    }, 12000);
+
+    // ============================================================
+    // FLOW INGESTION & BOUNDED WORKING SET MANAGEMENT
+    // ============================================================
+    function ingestFlowAlert(alert, isLive = true) {
+      if (!alert) return;
+
+      // 1. Deduplication using bounded O(1) ring buffer
+      const dedupKey = `${alert.flow_id}-${alert.timestamp}`;
+      if (checkAndMarkSeen(dedupKey)) return;
+
+      // 2. Incremental Counters (Maintained in O(1))
+      incTotalFlows++;
+      const pkts = Number(alert.total_packets || 0);
+      const bytes = Number(alert.total_bytes || 0);
+      incCumPackets += pkts;
+      incCumBytes += bytes;
+
+      if (alert.anomaly) incAnomalyCount++;
+      if (Number(alert.risk_score || 0) >= 70) incHighRiskCount++;
+
+      const proto = (alert.protocol || 'OTHER').toUpperCase();
+      if (proto.includes('TCP')) protoCounts.TCP++;
+      else if (proto.includes('UDP')) protoCounts.UDP++;
+      else if (proto.includes('ICMP')) protoCounts.ICMP++;
+      else protoCounts.OTHER++;
+
+      const dec = alert.decision || 'NORMAL';
+      if (decisionCounts[dec] !== undefined) decisionCounts[dec]++;
+      else decisionCounts[dec] = 1;
+
+      if (dec === 'NORMAL') incNormalCount++;
+      else if (dec === 'SUSPICIOUS') incSuspiciousCount++;
+      else if (dec === 'MALICIOUS') incMaliciousCount++;
+      else if (dec === 'UNKNOWN ATTACK') incUnknownCount++;
+      else if (dec === 'CRITICAL') incCriticalCount++;
+
+      // 3. Frequency Tracking (Bounded to MAP_MAX_ENTRIES)
+      trackFrequency(srcIpCounts, alert.src_ip);
+      trackFrequency(dstIpCounts, alert.dst_ip);
+      trackFrequency(portCounts, alert.dst_port || alert.src_port);
+
+      // 4. Bounded In-Memory Live Working Set
+      liveFlows.unshift(alert);
+      if (liveFlows.length > LIVE_MEMORY_LIMIT) {
+        liveFlows.pop(); // Evict oldest from RAM
+      }
+
+      // 5. Persist to Persistent JSON Storage
+      flowStorage.save(alert);
+
+      // 6. Threat Timeline Bounded Window
+      const isThreat = (dec !== 'NORMAL') || alert.anomaly || (alert.risk_score >= 60);
+      if (isThreat) {
+        liveThreats.unshift(alert);
+        if (liveThreats.length > TIMELINE_DOM_LIMIT) {
+          liveThreats.pop();
+        }
+      }
+
+      // 7. Instant Updates
+      updateLatestEventCard(alert);
+      appendChartPoint(alert);
+      insertTableRow(alert, isLive);
+
+      if (alert.decision === 'UNKNOWN ATTACK' || alert.decision === 'CRITICAL' || alert.risk_score >= 85) {
+        triggerThreatBanner(alert);
+      }
+
+      // 8. Schedule Throttled Rendering
+      scheduleUiUpdate();
+    }
+
+    // Throttled UI Rendering via requestAnimationFrame
+    function scheduleUiUpdate() {
+      if (renderScheduled) return;
+      renderScheduled = true;
+      requestAnimationFrame(() => {
+        renderScheduled = false;
+        updateDistributionCharts();
+        updateTopHostsLists();
+        updateStorageBadges();
+        if (currentFeedTab === 'timeline') {
+          updateTimelineUI();
+        }
+      });
+    }
+
+    function updateStatsDisplay(s) {
+      const total = Number((s && s.total_flows !== undefined) ? s.total_flows : incTotalFlows);
+      const normal = Number((s && s.normal_count !== undefined) ? s.normal_count : incNormalCount);
+      const susp = Number((s && s.suspicious_count !== undefined) ? s.suspicious_count : incSuspiciousCount);
+      const mal = Number((s && s.malicious_count !== undefined) ? s.malicious_count : incMaliciousCount);
+      const unk = Number((s && s.unknown_count !== undefined) ? s.unknown_count : incUnknownCount);
+      const crit = Number((s && s.critical_count !== undefined) ? s.critical_count : incCriticalCount);
+      const avgRisk = Number((s && s.average_risk !== undefined) ? s.average_risk : 0.0);
+      const activeThreats = susp + mal + unk + crit;
+
+      // KPI Numbers (O(1) updates without scanning flow arrays)
+      document.getElementById('kpiTotal').innerText = total.toLocaleString();
+      document.getElementById('kpiNormal').innerText = normal.toLocaleString();
+      document.getElementById('kpiThreats').innerText = activeThreats.toLocaleString();
+      document.getElementById('kpiHighRisk').innerText = (crit + incHighRiskCount).toLocaleString();
+      document.getElementById('kpiAnomalies').innerText = incAnomalyCount.toLocaleString();
+
+      // Packets / Bytes
+      document.getElementById('kpiVolumePkts').innerText = `${incCumPackets.toLocaleString()} pkts`;
+      document.getElementById('kpiVolumeBytes').innerText = `${formatBytes(incCumBytes)} observed`;
+
+      // Posture Summary
+      document.getElementById('postureAvgRisk').innerHTML = `${avgRisk.toFixed(1)} <span class="text-xs font-normal text-slate-500">/ 100</span>`;
+      const threatRatio = total > 0 ? ((activeThreats / total) * 100).toFixed(1) : "0.0";
+      const cleanRatio = total > 0 ? ((normal / total) * 100).toFixed(1) : "100.0";
+      document.getElementById('postureThreatRatio').innerText = `${threatRatio}%`;
+      document.getElementById('postureCleanRatio').innerText = `${cleanRatio}%`;
+
+      // Posture Level Badge
+      updatePostureLevel(avgRisk, activeThreats);
+
+      // Triage Card
+      document.getElementById('triageSuspicious').innerText = susp.toLocaleString();
+      document.getElementById('triageMalicious').innerText = mal.toLocaleString();
+      document.getElementById('triageUnknown').innerText = unk.toLocaleString();
+      document.getElementById('triageCritical').innerText = crit.toLocaleString();
+      document.getElementById('triageAnomaliesTotal').innerText = incAnomalyCount.toLocaleString();
+      document.getElementById('triageQuarantined').innerText = unk.toLocaleString();
+
+      // Mode & Interface UI
+      if (s && s.mode) updateModeUI(s.mode, s);
+
+      // Stream pause/resume button label
+      isReplaying = (s && s.replaying !== undefined) ? s.replaying !== false : isReplaying;
+      const btn = document.getElementById('btnToggleReplay');
+      if (btn) {
+        if (s && s.mode === 'live') {
+          btn.classList.add('hidden');
+        } else {
+          btn.classList.remove('hidden');
+          btn.innerText = isReplaying ? "Pause Stream" : "Resume Stream";
+          btn.className = isReplaying
+            ? "px-2.5 py-1 text-xs font-mono font-medium rounded bg-rose-700 hover:bg-rose-600 text-white transition shadow-sm"
+            : "px-2.5 py-1 text-xs font-mono font-medium rounded bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm";
+        }
+      }
+    }
+
+    function updatePostureLevel(avgRisk, activeThreats) {
+      const badge = document.getElementById('postureLevelBadge');
+      const gauge = document.getElementById('gaugeFill');
+      const gaugePct = document.getElementById('gaugePct');
+      const sub = document.getElementById('postureSubtext');
+
+      let label = "GUARDED";
+      let colorClass = "bg-emerald-950 text-emerald-400 border-emerald-700";
+      let strokeColor = "#10b981";
+
+      if (avgRisk >= 75 || activeThreats >= 50) {
+        label = "CRITICAL";
+        colorClass = "bg-pink-950 text-pink-300 border-pink-700";
+        strokeColor = "#ec4899";
+        sub.innerText = "Active Exploitation / Zero-Day Active";
+      } else if (avgRisk >= 50 || activeThreats >= 20) {
+        label = "SEVERE";
+        colorClass = "bg-rose-950 text-rose-300 border-rose-700";
+        strokeColor = "#ef4444";
+        sub.innerText = "Elevated Threat Signatures Present";
+      } else if (avgRisk >= 25 || activeThreats >= 5) {
+        label = "ELEVATED";
+        colorClass = "bg-amber-950 text-amber-300 border-amber-700";
+        strokeColor = "#f59e0b";
+        sub.innerText = "Borderline Deviations Monitored";
+      } else {
+        label = "HEALTHY";
+        colorClass = "bg-emerald-950 text-emerald-400 border-emerald-700";
+        strokeColor = "#10b981";
+        sub.innerText = "Normal Traffic Verified";
+      }
+
+      badge.className = `px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${colorClass}`;
+      badge.innerText = label;
+
+      // Update Gauge SVG
+      const pct = Math.min(100, Math.max(0, avgRisk));
+      gaugePct.innerText = `${Math.round(pct)}%`;
+      const circumference = 251.2;
+      const offset = circumference - (pct / 100) * circumference;
+      gauge.style.strokeDashoffset = offset;
+      gauge.style.stroke = strokeColor;
+    }
+
+    function updateLatestEventCard(alert) {
+      document.getElementById('latestEventTime').innerText = alert.timestamp ? alert.timestamp.substring(11, 23) : 'JUST NOW';
+
+      const body = document.getElementById('latestEventBody');
+      const decClass = getDecisionBadgeClass(alert.decision);
+      const riskColor = alert.risk_score >= 70 ? 'text-rose-400 font-bold' : (alert.risk_score >= 35 ? 'text-amber-400' : 'text-emerald-400');
+
+      body.innerHTML = `
+        <div class="flex items-center justify-between pb-1">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${decClass}">${alert.decision}</span>
+            <span class="text-white font-semibold">${alert.src_ip}:${alert.src_port} &rarr; ${alert.dst_ip}:${alert.dst_port}</span>
+          </div>
+          <span class="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300">${alert.protocol}</span>
+        </div>
+        <div class="text-[11px] text-slate-300 flex items-center justify-between">
+          <span>Hypothesis: <strong class="text-slate-100">${alert.prediction}</strong> (${(alert.confidence * 100).toFixed(1)}%)</span>
+          <span>Anomaly Score: <strong class="${alert.anomaly ? 'text-rose-400' : 'text-slate-300'}">${Number(alert.anomaly_score).toFixed(2)}</strong></span>
+          <span>Risk: <strong class="${riskColor}">${Number(alert.risk_score).toFixed(1)}/100</strong></span>
+        </div>
+        <div class="text-[11px] text-slate-400 truncate max-w-xl" title="${alert.reason}">
+          Action: <strong class="text-yellow-300">${alert.action}</strong> &bull; ${alert.reason}
+        </div>
+      `;
+
+      document.getElementById('latestDecisionPill').innerHTML = `DECISION: <span class="font-bold text-white">${alert.decision}</span>`;
+      document.getElementById('latestRiskPill').innerHTML = `ACTION: <span class="text-yellow-300">${alert.action}</span>`;
+    }
+
+    // ============================================================
+    // BOUNDED CHARTS STREAMING
+    // ============================================================
+    function appendChartPoint(alert) {
+      const timeLabel = alert.timestamp ? alert.timestamp.substring(14, 19) : new Date().toTimeString().substring(3, 8);
+      const anomScore = Number(alert.anomaly_score || 0);
+      const riskScore = Number(alert.risk_score || 0);
+
+      // Hide empty overlays
+      const anomEmpty = document.getElementById('anomalyChartEmpty');
+      const riskEmpty = document.getElementById('riskChartEmpty');
+      if (anomEmpty) anomEmpty.style.display = 'none';
+      if (riskEmpty) riskEmpty.style.display = 'none';
+
+      // Lightweight Tooltip Summaries (avoids retaining complete flow records in chart arrays)
+      const summary = {
+        score: anomScore,
+        thresh: alert.threshold || 1.3728,
+        dec: alert.decision || 'NORMAL',
+        pred: alert.prediction || 'Normal',
+        src: `${alert.src_ip}:${alert.src_port}`,
+        dst: `${alert.dst_ip}:${alert.dst_port}`,
+        risk: riskScore,
+        act: alert.action || 'ALLOW'
+      };
+
+      let anomColor = '#10b981';
+      if (alert.decision === 'UNKNOWN ATTACK') anomColor = '#a855f7';
+      else if (alert.decision === 'CRITICAL' || alert.decision === 'MALICIOUS') anomColor = '#ef4444';
+      else if (alert.decision === 'SUSPICIOUS') anomColor = '#f59e0b';
+      else if (alert.anomaly) anomColor = '#ef4444';
+
+      let riskColor = '#10b981';
+      if (riskScore >= 70) riskColor = '#ef4444';
+      else if (riskScore >= 35) riskColor = '#f59e0b';
+
+      const curRiskEl = document.getElementById('currentRiskValue');
+      if (curRiskEl) curRiskEl.innerText = `${riskScore.toFixed(1)}/100`;
+
+      // 1. Shift Anomaly Queue (Bounded to CHART_POINT_LIMIT)
+      anomalyChartData.labels.push(timeLabel);
+      anomalyChartData.values.push(anomScore);
+      anomalyChartData.colors.push(anomColor);
+      anomalyChartData.summaries.push(summary);
+
+      if (anomalyChartData.labels.length > CHART_POINT_LIMIT) {
+        anomalyChartData.labels.shift();
+        anomalyChartData.values.shift();
+        anomalyChartData.colors.shift();
+        anomalyChartData.summaries.shift();
+      }
+
+      // 2. Shift Risk Queue (Bounded to CHART_POINT_LIMIT)
+      riskChartData.labels.push(timeLabel);
+      riskChartData.values.push(riskScore);
+      riskChartData.colors.push(riskColor);
+      riskChartData.summaries.push(summary);
+
+      if (riskChartData.labels.length > CHART_POINT_LIMIT) {
+        riskChartData.labels.shift();
+        riskChartData.values.shift();
+        riskChartData.colors.shift();
+        riskChartData.summaries.shift();
+      }
+
+      // Sync chart dataset data references
+      if (anomalyChartInstance) {
+        anomalyChartInstance.data.labels = anomalyChartData.labels;
+        anomalyChartInstance.data.datasets[0].data = anomalyChartData.values;
+        anomalyChartInstance.data.datasets[0].pointBackgroundColor = anomalyChartData.colors;
+        anomalyChartInstance.data.datasets[0].pointBorderColor = anomalyChartData.colors;
+        anomalyChartInstance.data.datasets[1].data = new Array(anomalyChartData.values.length).fill(anomalyThreshold);
+      }
+
+      if (riskChartInstance) {
+        riskChartInstance.data.labels = riskChartData.labels;
+        riskChartInstance.data.datasets[0].data = riskChartData.values;
+        riskChartInstance.data.datasets[0].pointBackgroundColor = riskChartData.colors;
+        riskChartInstance.data.datasets[0].pointBorderColor = riskChartData.colors;
+      }
+    }
+
+    function updateDistributionCharts() {
+      const threatEmpty = document.getElementById('threatDistEmpty');
+      const protoEmpty = document.getElementById('protocolEmpty');
+      if (threatEmpty) threatEmpty.style.display = 'none';
+      if (protoEmpty) protoEmpty.style.display = 'none';
+
+      if (anomalyChartInstance) anomalyChartInstance.update('none');
+      if (riskChartInstance) riskChartInstance.update('none');
+
+      if (threatDistChartInstance) {
+        threatDistChartInstance.data.datasets[0].data = [
+          decisionCounts['NORMAL'] || 0,
+          decisionCounts['SUSPICIOUS'] || 0,
+          decisionCounts['MALICIOUS'] || 0,
+          decisionCounts['UNKNOWN ATTACK'] || 0,
+          decisionCounts['CRITICAL'] || 0,
+        ];
+        threatDistChartInstance.update('none');
+      }
+
+      if (protocolChartInstance) {
+        protocolChartInstance.data.datasets[0].data = [
+          protoCounts.TCP,
+          protoCounts.UDP,
+          protoCounts.ICMP,
+          protoCounts.OTHER,
+        ];
+        protocolChartInstance.update('none');
+      }
+    }
+
+    function updateTopHostsLists() {
+      const srcEl = document.getElementById('topSourcesList');
+      if (srcEl) {
+        const sortedSources = Array.from(srcIpCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        const totalSrcHits = Array.from(srcIpCounts.values()).reduce((a, b) => a + b, 0) || 1;
+
+        if (sortedSources.length === 0) {
+          srcEl.innerHTML = `<div class="py-12 text-center text-slate-500">WAITING FOR TELEMETRY</div>`;
+        } else {
+          srcEl.innerHTML = sortedSources.map(([ip, count]) => {
+            const pct = Math.round((count / totalSrcHits) * 100);
+            return `
+              <div>
+                <div class="flex items-center justify-between text-[11px] pb-0.5">
+                  <span class="text-slate-300 font-semibold truncate">${ip}</span>
+                  <span class="text-slate-400">${count} flows (${pct}%)</span>
+                </div>
+                <div class="w-full bg-slate-800 h-1 rounded overflow-hidden">
+                  <div class="bg-blue-500 h-1 rounded" style="width: ${pct}%"></div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+
+      const dstEl = document.getElementById('topDestinationsList');
+      if (dstEl) {
+        const sortedDests = Array.from(dstIpCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3);
+        const sortedPorts = Array.from(portCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 4);
+
+        if (sortedDests.length === 0) {
+          dstEl.innerHTML = `<div class="py-12 text-center text-slate-500">WAITING FOR TELEMETRY</div>`;
+        } else {
+          let html = `<div class="text-[10px] text-slate-500 uppercase pb-1">Top Targets:</div>`;
+          html += sortedDests.map(([ip, count]) => `
+            <div class="flex items-center justify-between text-[11px] py-0.5">
+              <span class="text-slate-300 truncate">${ip}</span>
+              <span class="text-emerald-400 font-semibold">${count} hits</span>
+            </div>
+          `).join('');
+
+          html += `<div class="text-[10px] text-slate-500 uppercase pt-2 pb-1 border-t border-slate-800/80">Active Target Ports:</div><div class="flex flex-wrap gap-1.5">`;
+          html += sortedPorts.map(([port, count]) => `
+            <span class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-[10px] text-slate-300">
+              :${port} <strong class="text-cyan-400">(${count})</strong>
+            </span>
+          `).join('');
+          html += `</div>`;
+          dstEl.innerHTML = html;
+        }
+      }
+    }
+
+    // ============================================================
+    // LIVE EVENT TABLE RENDERER (Bounded Working Set in DOM)
+    // ============================================================
+    function insertTableRow(alert, isNew = true) {
+      const tbody = document.getElementById('eventTableBody');
+      const emptyRow = document.getElementById('tableEmptyRow');
+      if (emptyRow) emptyRow.remove();
+
+      const tr = document.createElement('tr');
+      tr.className = `hover:bg-socCardHover/70 transition cursor-pointer ${isNew ? 'new-row-highlight' : ''}`;
+      tr.dataset.decision = alert.decision || 'NORMAL';
+      tr.dataset.prediction = alert.prediction || '';
+      tr.dataset.src = alert.src_ip || '';
+      tr.dataset.dst = alert.dst_ip || '';
+      tr.dataset.proto = alert.protocol || '';
+
+      tr.onclick = () => openAuditModal(alert);
+
+      const decisionClass = getDecisionBadgeClass(alert.decision);
+      const confPct = (Number(alert.confidence || 0) * 100).toFixed(1);
+      const anomScore = Number(alert.anomaly_score || 0).toFixed(2);
+      const riskScore = Number(alert.risk_score || 0).toFixed(1);
+
+      let riskColor = "text-emerald-400";
+      if (alert.risk_score >= 70) riskColor = "text-rose-400 font-bold";
+      else if (alert.risk_score >= 35) riskColor = "text-yellow-400 font-semibold";
+
+      const timeStr = alert.timestamp ? alert.timestamp.substring(11, 23) : '--:--:--';
+
+      tr.innerHTML = `
+        <td class="py-2.5 px-3.5 text-slate-400">${timeStr}</td>
+        <td class="py-2.5 px-3.5 font-mono text-slate-200">
+          <span class="text-slate-300">${alert.src_ip}:${alert.src_port}</span>
+          <span class="text-slate-500 px-1">&rarr;</span>
+          <span class="text-slate-300">${alert.dst_ip}:${alert.dst_port}</span>
+        </td>
+        <td class="py-2.5 px-3.5"><span class="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 font-bold">${alert.protocol}</span></td>
+        <td class="py-2.5 px-3.5 font-semibold text-slate-200">${alert.prediction}</td>
+        <td class="py-2.5 px-3.5 text-slate-300">${confPct}%</td>
+        <td class="py-2.5 px-3.5 ${alert.anomaly ? 'text-purple-400 font-bold' : 'text-slate-400'}">${anomScore}</td>
+        <td class="py-2.5 px-3.5 ${riskColor}">${riskScore}</td>
+        <td class="py-2.5 px-3.5"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${decisionClass}">${alert.decision}</span></td>
+        <td class="py-2.5 px-3.5 text-[11px] text-yellow-300/90">${alert.action || 'ALLOW'}</td>
+        <td class="py-2.5 px-3.5 text-slate-400 truncate max-w-xs" title="${alert.reason || ''}">${alert.reason || '-'}</td>
+      `;
+
+      tbody.insertBefore(tr, tbody.firstChild);
+
+      // Enforce strict DOM row limit to prevent browser memory growth
+      while (tbody.children.length > FEED_DOM_LIMIT) {
+        tbody.removeChild(tbody.lastChild);
+      }
+    }
+
+    // ============================================================
+    // ATTACK CHRONOLOGICAL TIMELINE VIEW (Bounded Live Window)
+    // ============================================================
+    function updateTimelineUI() {
+      const container = document.getElementById('timelineContainer');
+      if (!container) return;
+
+      if (liveThreats.length === 0) {
+        container.innerHTML = `<div class="py-16 text-center text-slate-500 font-mono">NO THREAT EVENTS RECORDED YET</div>`;
+        return;
+      }
+
+      container.innerHTML = liveThreats.slice(0, TIMELINE_DOM_LIMIT).map((a) => {
+        const timeStr = a.timestamp ? a.timestamp.substring(11, 23) : '--:--:--';
+        const decClass = getDecisionBadgeClass(a.decision);
+        return `
+          <div onclick="openAuditModalByFlowId('${a.flow_id}')" class="p-3 rounded-lg border border-socBorder bg-socCard/80 hover:bg-socCardHover transition cursor-pointer flex items-start justify-between gap-3">
+            <div class="flex items-start gap-3">
+              <span class="mt-0.5 text-base">${a.decision === 'UNKNOWN ATTACK' ? '👾' : '⚠️'}</span>
+              <div class="space-y-0.5">
+                <div class="flex items-center gap-2">
+                  <span class="text-slate-400 text-[11px]">${timeStr}</span>
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${decClass}">${a.decision}</span>
+                  <span class="text-white font-semibold">${a.src_ip}:${a.src_port} &rarr; ${a.dst_ip}:${a.dst_port}</span>
+                </div>
+                <div class="text-[11px] text-slate-300">
+                  Hypothesis: <strong class="text-white">${a.prediction}</strong> &bull; Anomaly Score: <strong>${a.anomaly_score}</strong> &bull; Risk: <strong class="text-rose-400">${a.risk_score}/100</strong>
+                </div>
+                <div class="text-[11px] text-slate-400 italic">
+                  ${a.reason}
+                </div>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-950/70 border border-yellow-700 text-yellow-300">
+                ${a.action}
+              </span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ============================================================
+    // PERSISTENT FLOW & INCIDENT HISTORY PAGINATED VIEWS
+    // ============================================================
+    async function loadHistoryPage(page = 1) {
+      currentHistoryPage = page;
+      const q = (document.getElementById('filterSearch').value || '').trim();
+      const severity = document.getElementById('filterSeverity').value;
+
+      const res = await flowStorage.getPage({
+        page: currentHistoryPage,
+        pageSize: historyPageSize,
+        query: q,
+        severity: severity
+      });
+
+      const pageNumEl = document.getElementById('histPageNum');
+      const totalPagesEl = document.getElementById('histTotalPages');
+      const totalRecordsEl = document.getElementById('histTotalRecords');
+      if (pageNumEl) pageNumEl.innerText = res.page;
+      if (totalPagesEl) totalPagesEl.innerText = res.totalPages;
+      if (totalRecordsEl) totalRecordsEl.innerText = res.totalMatches.toLocaleString();
+
+      const tbody = document.getElementById('historyTableBody');
+      if (!tbody) return;
+
+      if (res.records.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="10" class="py-16 text-center text-slate-500">
+              NO FLOWS FOUND MATCHING CURRENT FILTER IN PERSISTENT STORE
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = res.records.map(renderHistoricalRowHtml).join('');
+    }
+
+    async function loadIncidentPage(page = 1) {
+      currentIncidentPage = page;
+      const q = (document.getElementById('filterSearch').value || '').trim();
+
+      const res = await flowStorage.getIncidents({
+        page: currentIncidentPage,
+        pageSize: incidentPageSize,
+        query: q
+      });
+
+      const pageNumEl = document.getElementById('incPageNum');
+      const totalPagesEl = document.getElementById('incTotalPages');
+      const totalRecordsEl = document.getElementById('incTotalRecords');
+      if (pageNumEl) pageNumEl.innerText = res.page;
+      if (totalPagesEl) totalPagesEl.innerText = res.totalPages;
+      if (totalRecordsEl) totalRecordsEl.innerText = res.totalMatches.toLocaleString();
+
+      const tbody = document.getElementById('incidentTableBody');
+      if (!tbody) return;
+
+      if (res.records.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="10" class="py-16 text-center text-slate-500">
+              NO INCIDENTS RECORDED IN PERSISTENT STORE
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = res.records.map(renderHistoricalRowHtml).join('');
+    }
+
+    function renderHistoricalRowHtml(alert) {
+      const decisionClass = getDecisionBadgeClass(alert.decision);
+      const confPct = (Number(alert.confidence || 0) * 100).toFixed(1);
+      const anomScore = Number(alert.anomaly_score || 0).toFixed(2);
+      const riskScore = Number(alert.risk_score || 0).toFixed(1);
+
+      let riskColor = "text-emerald-400";
+      if (alert.risk_score >= 70) riskColor = "text-rose-400 font-bold";
+      else if (alert.risk_score >= 35) riskColor = "text-yellow-400 font-semibold";
+
+      const timeStr = alert.timestamp ? alert.timestamp.substring(11, 23) : '--:--:--';
+
+      return `
+        <tr onclick="openAuditModalByFlowId('${alert.flow_id}')" class="hover:bg-socCardHover/70 transition cursor-pointer">
+          <td class="py-2 px-3 text-slate-400">${timeStr}</td>
+          <td class="py-2 px-3 text-slate-200">
+            <span class="text-slate-300">${alert.src_ip}:${alert.src_port}</span>
+            <span class="text-slate-500 px-1">&rarr;</span>
+            <span class="text-slate-300">${alert.dst_ip}:${alert.dst_port}</span>
+          </td>
+          <td class="py-2 px-3"><span class="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 font-bold">${alert.protocol}</span></td>
+          <td class="py-2 px-3 font-semibold text-slate-200">${alert.prediction}</td>
+          <td class="py-2 px-3 text-slate-300">${confPct}%</td>
+          <td class="py-2 px-3 ${alert.anomaly ? 'text-purple-400 font-bold' : 'text-slate-400'}">${anomScore}</td>
+          <td class="py-2 px-3 ${riskColor}">${riskScore}</td>
+          <td class="py-2 px-3"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${decisionClass}">${alert.decision}</span></td>
+          <td class="py-2 px-3 text-[11px] text-yellow-300/90">${alert.action || 'ALLOW'}</td>
+          <td class="py-2 px-3 text-slate-400 truncate max-w-xs" title="${alert.reason || ''}">${alert.reason || '-'}</td>
+        </tr>
+      `;
+    }
+
+    function navigateHistoryPage(action) {
+      const totalPages = Number(document.getElementById('histTotalPages').innerText || 1);
+      if (action === 'first') loadHistoryPage(1);
+      else if (action === 'prev') loadHistoryPage(Math.max(1, currentHistoryPage - 1));
+      else if (action === 'next') loadHistoryPage(Math.min(totalPages, currentHistoryPage + 1));
+      else if (action === 'last') loadHistoryPage(totalPages);
+    }
+
+    function navigateIncidentPage(action) {
+      const totalPages = Number(document.getElementById('incTotalPages').innerText || 1);
+      if (action === 'first') loadIncidentPage(1);
+      else if (action === 'prev') loadIncidentPage(Math.max(1, currentIncidentPage - 1));
+      else if (action === 'next') loadIncidentPage(Math.min(totalPages, currentIncidentPage + 1));
+      else if (action === 'last') loadIncidentPage(totalPages);
+    }
+
+    function changeHistoryPageSize(sz) {
+      historyPageSize = Number(sz);
+      loadHistoryPage(1);
+    }
+
+    function changeIncidentPageSize(sz) {
+      incidentPageSize = Number(sz);
+      loadIncidentPage(1);
+    }
+
+    function exportHistoryJson() {
+      flowStorage.exportAsJson(10000, false);
+      showToast('Exporting up to 10,000 flows as JSON file...', 'info');
+    }
+
+    function exportIncidentsJson() {
+      flowStorage.exportAsJson(10000, true);
+      showToast('Exporting incident logs as JSON file...', 'info');
+    }
+
+    async function clearPersistentHistory() {
+      if (confirm('Clear all stored historical flows from local persistent storage?')) {
+        await flowStorage.clear();
+        loadHistoryPage(1);
+        loadIncidentPage(1);
+        showToast('Persistent flow history cleared', 'info');
+      }
+    }
+
+    // ============================================================
+    // TAB SWITCHER
+    // ============================================================
+    function switchFeedTab(tab) {
+      currentFeedTab = tab;
+      const btnFeed = document.getElementById('tabBtnFeed');
+      const btnTimeline = document.getElementById('tabBtnTimeline');
+      const btnHistory = document.getElementById('tabBtnHistory');
+      const btnIncidents = document.getElementById('tabBtnIncidents');
+
+      const feedContent = document.getElementById('tabContentFeed');
+      const timelineContent = document.getElementById('tabContentTimeline');
+      const historyContent = document.getElementById('tabContentHistory');
+      const incidentsContent = document.getElementById('tabContentIncidents');
+
+      // Reset button styles
+      [btnFeed, btnTimeline, btnHistory, btnIncidents].forEach(b => {
+        if (b) b.className = "px-3 py-1 text-xs font-mono font-semibold rounded text-slate-400 hover:text-white transition flex items-center gap-1.5";
+      });
+
+      // Hide all panels
+      feedContent.classList.add('hidden');
+      timelineContent.classList.add('hidden');
+      historyContent.classList.add('hidden');
+      incidentsContent.classList.add('hidden');
+
+      if (tab === 'feed') {
+        btnFeed.className = "px-3 py-1 text-xs font-mono font-semibold rounded bg-indigo-600 text-white shadow";
+        feedContent.classList.remove('hidden');
+      } else if (tab === 'timeline') {
+        btnTimeline.className = "px-3 py-1 text-xs font-mono font-semibold rounded bg-indigo-600 text-white shadow";
+        timelineContent.classList.remove('hidden');
+        updateTimelineUI();
+      } else if (tab === 'history') {
+        btnHistory.className = "px-3 py-1 text-xs font-mono font-semibold rounded bg-indigo-600 text-white shadow flex items-center gap-1.5";
+        historyContent.classList.remove('hidden');
+        loadHistoryPage(currentHistoryPage);
+      } else if (tab === 'incidents') {
+        btnIncidents.className = "px-3 py-1 text-xs font-mono font-semibold rounded bg-rose-800 text-white shadow flex items-center gap-1.5";
+        incidentsContent.classList.remove('hidden');
+        loadIncidentPage(currentIncidentPage);
+      }
+    }
+
+    // ============================================================
+    // FORENSIC AUDIT MODAL (With Storage Lookup Support)
+    // ============================================================
+    async function openAuditModalByFlowId(flowId) {
+      if (!flowId) return;
+      // 1. Check live in-memory window first
+      let match = liveFlows.find(f => f.flow_id === flowId);
+      if (!match) {
+        // 2. Query persistent JSON storage
+        match = await flowStorage.getFlowById(flowId);
+      }
+      if (match) {
+        openAuditModal(match);
+      } else {
+        showToast(`Flow ${flowId} could not be retrieved`, 'error');
+      }
+    }
+
+    function openAuditModal(alert) {
+      if (!alert) return;
+      currentModalAlert = alert;
+
+      document.getElementById('modalFlowId').innerText = `FLOW ID: ${alert.flow_id}`;
+      const decClass = getDecisionBadgeClass(alert.decision);
+      const riskClass = alert.risk_score >= 70 ? 'text-rose-400 font-bold' : (alert.risk_score >= 35 ? 'text-amber-400' : 'text-emerald-400');
+
+      const body = document.getElementById('modalBody');
+      body.innerHTML = `
+        <!-- Section 1: Network Layer 5-Tuple -->
+        <div class="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+          <div class="text-[11px] font-bold uppercase text-slate-400 tracking-wider flex items-center justify-between border-b border-slate-800 pb-1.5">
+            <span>Network Layer Telemetry</span>
+            <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-bold">${alert.protocol}</span>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-2.5 text-xs">
+            <div><span class="text-slate-500">Source:</span> <strong class="text-white">${alert.src_ip}:${alert.src_port}</strong></div>
+            <div><span class="text-slate-500">Destination:</span> <strong class="text-white">${alert.dst_ip}:${alert.dst_port}</strong></div>
+            <div><span class="text-slate-500">Duration:</span> <strong class="text-slate-300">${alert.flow_duration_secs}s</strong></div>
+            <div><span class="text-slate-500">Packets:</span> <strong class="text-slate-300">${alert.total_packets || '-'} pkts</strong></div>
+            <div><span class="text-slate-500">Bytes:</span> <strong class="text-slate-300">${alert.total_bytes ? formatBytes(alert.total_bytes) : '-'}</strong></div>
+            <div><span class="text-slate-500">Ground Truth:</span> <strong class="text-indigo-300">${alert.ground_truth_label || 'None (Live Telemetry)'}</strong></div>
+          </div>
+        </div>
+
+        <!-- Section 2: Machine Learning Subspace Inference -->
+        <div class="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+          <div class="text-[11px] font-bold uppercase text-slate-400 tracking-wider flex items-center justify-between border-b border-slate-800 pb-1.5">
+            <span>ML Detector &amp; Subspace PCA</span>
+            <span class="text-indigo-400 font-semibold">Dual-Subspace PCA + Deep AE</span>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 text-xs">
+            <div><span class="text-slate-500">Prediction:</span> <strong class="text-white">${alert.prediction}</strong></div>
+            <div><span class="text-slate-500">Confidence:</span> <strong class="text-slate-200">${(Number(alert.confidence || 0) * 100).toFixed(2)}%</strong></div>
+            <div><span class="text-slate-500">Anomaly Score:</span> <strong class="${alert.anomaly ? 'text-purple-400 font-bold' : 'text-slate-300'}">${alert.anomaly_score}</strong></div>
+            <div><span class="text-slate-500">Threshold:</span> <strong class="text-slate-300">${alert.threshold}</strong></div>
+          </div>
+          <div class="text-[11px] text-slate-400 pt-1 flex items-center gap-2">
+            <span>Anomaly Decision:</span>
+            <span class="px-2 py-0.5 rounded font-bold text-[10px] ${alert.anomaly ? 'bg-purple-950 text-purple-300 border border-purple-700' : 'bg-emerald-950 text-emerald-300 border border-emerald-700'}">
+              ${alert.anomaly ? 'ANOMALY DETECTED (SCORE &ge; THRESHOLD)' : 'CONFORMS TO NORMAL MANIFOLD'}
+            </span>
+          </div>
+        </div>
+
+        <!-- Section 3: Deterministic Risk Engine Evaluation -->
+        <div class="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+          <div class="text-[11px] font-bold uppercase text-slate-400 tracking-wider flex items-center justify-between border-b border-slate-800 pb-1.5">
+            <span>Deterministic Risk Engine Policy</span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${decClass}">${alert.decision}</span>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-2.5 text-xs">
+            <div><span class="text-slate-500">Security Decision:</span> <strong class="text-white">${alert.decision}</strong></div>
+            <div><span class="text-slate-500">Risk Score:</span> <strong class="${riskClass}">${alert.risk_score} / 100</strong></div>
+            <div><span class="text-slate-500">Recommended Action:</span> <strong class="text-yellow-300">${alert.action}</strong></div>
+          </div>
+          <div class="pt-2 border-t border-slate-800">
+            <div class="text-[11px] text-slate-500 mb-1">Audit Trail Rationale:</div>
+            <div class="p-2.5 rounded bg-slate-950 border border-slate-800 text-slate-300 text-[11px] leading-relaxed">
+              ${alert.reason || 'Conforms to baseline traffic.'}
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('auditModal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('auditModal').classList.add('hidden');
+      currentModalAlert = null;
+    }
+
+    function copyModalJson() {
+      if (!currentModalAlert) return;
+      navigator.clipboard.writeText(JSON.stringify(currentModalAlert, null, 2))
+        .then(() => showToast('Flow JSON copied to clipboard', 'info'))
+        .catch(() => showToast('Failed to copy JSON', 'error'));
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+    });
+
+    // ============================================================
+    // FILTER CONTROLS
+    // ============================================================
+    function applyFilters() {
+      if (currentFeedTab === 'history') {
+        loadHistoryPage(1);
+        return;
+      }
+      if (currentFeedTab === 'incidents') {
+        loadIncidentPage(1);
+        return;
+      }
+
+      // Live table client filtering
+      const query = (document.getElementById('filterSearch').value || '').toLowerCase().trim();
+      const severity = document.getElementById('filterSeverity').value;
+      const rows = document.getElementById('eventTableBody').children;
+
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        if (r.id === 'tableEmptyRow') continue;
+
+        const dec = r.dataset.decision || '';
+        const pred = (r.dataset.prediction || '').toLowerCase();
+        const src = (r.dataset.src || '').toLowerCase();
+        const dst = (r.dataset.dst || '').toLowerCase();
+        const proto = (r.dataset.proto || '').toLowerCase();
+
+        let matchesSeverity = true;
+        if (severity === 'THREATS_ONLY') matchesSeverity = (dec !== 'NORMAL');
+        else if (severity === 'UNKNOWN_ONLY') matchesSeverity = (dec === 'UNKNOWN ATTACK');
+        else if (severity === 'CRITICAL_ONLY') matchesSeverity = (dec === 'CRITICAL' || dec === 'MALICIOUS');
+        else if (severity === 'NORMAL_ONLY') matchesSeverity = (dec === 'NORMAL');
+
+        let matchesSearch = true;
+        if (query) {
+          matchesSearch = (
+            src.includes(query) ||
+            dst.includes(query) ||
+            proto.includes(query) ||
+            pred.includes(query) ||
+            dec.toLowerCase().includes(query)
+          );
+        }
+
+        r.style.display = (matchesSeverity && matchesSearch) ? '' : 'none';
+      }
+    }
+
+    // ============================================================
+    // BANNERS & NOTIFICATIONS
+    // ============================================================
+    function triggerThreatBanner(a) {
+      const sec = document.getElementById('bannerSection');
+      const banner = document.getElementById('threatBanner');
+      const title = document.getElementById('bannerTitle');
+      const details = document.getElementById('bannerDetails');
+      const badge = document.getElementById('bannerBadge');
+      const icon = document.getElementById('bannerIcon');
+
+      sec.classList.remove('hidden');
+
+      if (a.decision === 'UNKNOWN ATTACK') {
+        banner.className = "p-3.5 px-4 rounded-lg border bg-purple-950/40 border-purple-700/80 flex items-start justify-between gap-4 shadow-lg shadow-purple-950/30";
+        title.className = "text-xs font-mono font-bold uppercase tracking-wider text-purple-300";
+        title.innerText = "🚨 NOVEL ZERO-DAY INTRUSION DETECTED (QUARANTINED)";
+        icon.innerText = "👾";
+        badge.className = "px-2.5 py-1 text-xs font-mono font-bold rounded bg-purple-900/60 border border-purple-600 text-purple-200";
+      } else {
+        banner.className = "p-3.5 px-4 rounded-lg border bg-rose-950/40 border-rose-700/80 flex items-start justify-between gap-4 shadow-lg shadow-rose-950/30";
+        title.className = "text-xs font-mono font-bold uppercase tracking-wider text-rose-300";
+        title.innerText = "🚨 HIGH-SEVERITY SECURITY INCIDENT INTERCEPTED";
+        icon.innerText = "⚠️";
+        badge.className = "px-2.5 py-1 text-xs font-mono font-bold rounded bg-rose-900/60 border border-rose-600 text-rose-200";
+      }
+
+      badge.innerText = a.action;
+      details.innerText = `Flow: ${a.src_ip}:${a.src_port} \u2192 ${a.dst_ip}:${a.dst_port} \u2022 Risk: ${a.risk_score}/100 \u2022 Anomaly: ${a.anomaly_score} (Threshold: ${a.threshold}) \u2022 ${a.reason}`;
+    }
+
+    function dismissBanner() {
+      document.getElementById('bannerSection').classList.add('hidden');
+    }
+
+    function showToast(text, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const borderCol = type === 'success' ? 'border-emerald-600 text-emerald-300' : (type === 'error' ? 'border-rose-600 text-rose-300' : 'border-indigo-600 text-indigo-300');
+      toast.className = `p-2.5 px-3.5 rounded-lg bg-slate-900/95 border ${borderCol} text-xs font-mono shadow-xl transition-all duration-300 opacity-0 transform translate-y-2 pointer-events-auto`;
+      toast.innerText = text;
+
+      container.appendChild(toast);
+      requestAnimationFrame(() => {
+        toast.classList.remove('opacity-0', 'translate-y-2');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // ============================================================
+    // MODE CONTROLS & BACKEND API
+    // ============================================================
+    async function switchMode(mode) {
+      try {
+        const res = await fetch(`${apiBase}/api/mode?mode=${mode}`, { method: 'POST' });
+        const data = await res.json();
+        clearLiveFeedOnly();
+        updateModeUI(data.mode, data.stats);
+      } catch (e) {
+        showToast(`Failed to switch mode: ${e.message}`, 'error');
+      }
+    }
+
+    function updateModeUI(mode, s) {
+      activeMode = mode;
+      const btnLive = document.getElementById('btnModeLive');
+      const btnCaptured = document.getElementById('btnModeCaptured');
+      const btnDemo = document.getElementById('btnModeDemo');
+      const ifaceTxt = document.getElementById('txtInterface');
+      const srcTxt = document.getElementById('txtModeSource');
+
+      // Reset button classes
+      btnLive.className = "px-3 py-1.5 text-xs font-semibold rounded font-mono transition text-slate-400 hover:text-white flex items-center gap-1.5";
+      btnCaptured.className = "px-3 py-1.5 text-xs font-semibold rounded font-mono transition text-slate-400 hover:text-white flex items-center gap-1.5";
+      btnDemo.className = "px-3 py-1.5 text-xs font-semibold rounded font-mono transition text-slate-400 hover:text-white flex items-center gap-1.5";
+
+      if (mode === 'live') {
+        btnLive.className = "px-3 py-1.5 text-xs font-semibold rounded font-mono transition bg-emerald-600 text-white shadow shadow-emerald-500/20 flex items-center gap-1.5";
+        const iface = (s && s.interface) || "virbr0";
+        if (ifaceTxt) ifaceTxt.innerText = iface;
+        if (srcTxt) srcTxt.innerText = `Interface: ${iface} (libpcap stream)`;
+      } else if (mode === 'captured') {
+        btnCaptured.className = "px-3 py-1.5 text-xs font-semibold rounded font-mono transition bg-amber-600 text-white shadow shadow-amber-500/20 flex items-center gap-1.5";
+        if (ifaceTxt) ifaceTxt.innerText = "N/A (Replay)";
+        if (srcTxt) srcTxt.innerText = "live_flows.jsonl";
+      } else {
+        btnDemo.className = "px-3 py-1.5 text-xs font-semibold rounded font-mono transition bg-indigo-600 text-white shadow shadow-indigo-500/20 flex items-center gap-1.5";
+        if (ifaceTxt) ifaceTxt.innerText = "N/A (Demo)";
+        if (srcTxt) srcTxt.innerText = "demo_traffic.jsonl (CICIDS2017 benchmark)";
+      }
+    }
+
+    async function toggleReplay() {
+      try {
+        if (isReplaying) {
+          await fetch(`${apiBase}/api/replay/stop`, { method: 'POST' });
+        } else {
+          await fetch(`${apiBase}/api/replay/start`, { method: 'POST' });
+        }
+      } catch (e) {
+        showToast(`Stream control failed: ${e.message}`, 'error');
+      }
+    }
+
+    async function changeSpeed(delay) {
+      try {
+        await fetch(`${apiBase}/api/replay/start?delay=${delay}`, { method: 'POST' });
+      } catch (e) {
+        showToast(`Speed adjustment failed: ${e.message}`, 'error');
+      }
+    }
+
+    async function resetStatsAndTable() {
+      try {
+        await fetch(`${apiBase}/api/replay/reset`, { method: 'POST' });
+        resetLocalState();
+      } catch (e) {
+        showToast(`Reset failed: ${e.message}`, 'error');
+      }
+    }
+
+    function clearLiveFeedOnly() {
+      const tbody = document.getElementById('eventTableBody');
+      if (tbody) {
+        tbody.innerHTML = `
+          <tr id="tableEmptyRow">
+            <td colspan="10" class="py-16 text-center text-slate-500 font-mono">
+              WAITING FOR TELEMETRY &bull; INGESTION ENGINE STANDING BY
+            </td>
+          </tr>
+        `;
+      }
+      liveFlows.length = 0;
+      updateStorageBadges();
+    }
+
+    function resetLocalState() {
+      liveFlows.length = 0;
+      liveThreats.length = 0;
+      seenFlowKeys.clear();
+      seenKeysQueue.length = 0;
+
+      incTotalFlows = 0;
+      incNormalCount = 0;
+      incSuspiciousCount = 0;
+      incMaliciousCount = 0;
+      incUnknownCount = 0;
+      incCriticalCount = 0;
+      incHighRiskCount = 0;
+      incAnomalyCount = 0;
+      incCumPackets = 0;
+      incCumBytes = 0;
+
+      srcIpCounts.clear();
+      dstIpCounts.clear();
+      portCounts.clear();
+      protoCounts.TCP = 0;
+      protoCounts.UDP = 0;
+      protoCounts.ICMP = 0;
+      protoCounts.OTHER = 0;
+      Object.keys(decisionCounts).forEach(k => decisionCounts[k] = 0);
+
+      anomalyChartData.labels.length = 0;
+      anomalyChartData.values.length = 0;
+      anomalyChartData.colors.length = 0;
+      anomalyChartData.summaries.length = 0;
+
+      riskChartData.labels.length = 0;
+      riskChartData.values.length = 0;
+      riskChartData.colors.length = 0;
+      riskChartData.summaries.length = 0;
+
+      clearLiveFeedOnly();
+      updateTimelineUI();
+      updateTopHostsLists();
+
+      document.getElementById('anomalyChartEmpty').style.display = 'flex';
+      document.getElementById('riskChartEmpty').style.display = 'flex';
+      document.getElementById('threatDistEmpty').style.display = 'flex';
+      document.getElementById('protocolEmpty').style.display = 'flex';
+
+      if (anomalyChartInstance) anomalyChartInstance.update();
+      if (riskChartInstance) riskChartInstance.update();
+      if (threatDistChartInstance) {
+        threatDistChartInstance.data.datasets[0].data = [0, 0, 0, 0, 0];
+        threatDistChartInstance.update();
+      }
+      if (protocolChartInstance) {
+        protocolChartInstance.data.datasets[0].data = [0, 0, 0, 0];
+        protocolChartInstance.update();
+      }
+    }
+
+    // ============================================================
+    // UTILITIES
+    // ============================================================
+    function getDecisionBadgeClass(decision) {
+      switch (decision) {
+        case 'NORMAL': return 'badge-normal';
+        case 'SUSPICIOUS': return 'badge-suspicious';
+        case 'MALICIOUS': return 'badge-malicious';
+        case 'UNKNOWN ATTACK': return 'badge-unknown';
+        case 'CRITICAL': return 'badge-critical';
+        default: return 'bg-slate-800 text-slate-300 border border-slate-700';
+      }
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const dm = 1;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+
+    // Periodic fallback polling when WebSocket is disconnected
+    setInterval(async () => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        try {
+          const [statsRes, histRes] = await Promise.allSettled([
+            fetch(`${apiBase}/api/stats`).then(r => r.json()),
+            fetch(`${apiBase}/api/history?limit=15`).then(r => r.json())
+          ]);
+          if (statsRes.status === 'fulfilled' && statsRes.value) {
+            updateStatsDisplay(statsRes.value);
+          }
+          if (histRes.status === 'fulfilled' && Array.isArray(histRes.value)) {
+            const reversed = [...histRes.value].reverse();
+            reversed.forEach(a => ingestFlowAlert(a, false));
+          }
+        } catch (_) {}
+      }
+    }, 2500);
+
+    // Initial Telemetry Snapshot Loader
+    async function fetchInitialSnapshot() {
+      try {
+        const [statsRes, histRes] = await Promise.allSettled([
+          fetch(`${apiBase}/api/stats`).then(r => r.json()),
+          fetch(`${apiBase}/api/history?limit=30`).then(r => r.json())
+        ]);
+        if (statsRes.status === 'fulfilled' && statsRes.value) {
+          updateStatsDisplay(statsRes.value);
+        }
+        if (histRes.status === 'fulfilled' && Array.isArray(histRes.value) && histRes.value.length > 0) {
+          const reversed = [...histRes.value].reverse();
+          reversed.forEach(a => ingestFlowAlert(a, false));
+        }
+      } catch (e) {
+        console.warn("REST snapshot fetch notice:", e);
+      }
+    }
+
+    // Window Cleanup
+    window.addEventListener('beforeunload', () => {
+      if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
+      if (ws) {
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onclose = null;
+        ws.onerror = null;
+        try { ws.close(); } catch (_) {}
+      }
+    });
+
+    // Boot
+    window.addEventListener('DOMContentLoaded', () => {
+      initCharts();
+      fetchInitialSnapshot();
+      initWebSocket();
+    });
+  </script>
+</body>
+</html>
